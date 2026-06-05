@@ -8,22 +8,20 @@
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
-        Width="520"
+        Width="560"
         Height="70">
 
     <Window.Resources>
 
-        <!-- ══════════════════════════════════════════ -->
-        <!--               缓动函数                    -->
-        <!-- ══════════════════════════════════════════ -->
-        <CubicEase     x:Key="EaseOut"     EasingMode="EaseOut"/>
-        <BackEase      x:Key="BounceBack"  EasingMode="EaseOut" Amplitude="0.4"/>
-        <QuarticEase   x:Key="EaseInOut"   EasingMode="EaseInOut"/>
-        <ElasticEase   x:Key="Elastic"     EasingMode="EaseOut" Oscillations="1" Springiness="5"/>
+        <!-- ══════ 缓动函数 ══════ -->
+        <CubicEase     x:Key="EaseOut"      EasingMode="EaseOut"/>
+        <CubicEase     x:Key="EaseInOut"    EasingMode="EaseInOut"/>
+        <BackEase      x:Key="BounceBack"   EasingMode="EaseOut"  Amplitude="0.4"/>
+        <BackEase      x:Key="SpringOpen"   EasingMode="EaseOut"  Amplitude="0.3"/>
+        <BackEase      x:Key="SpringClose"  EasingMode="EaseOut"  Amplitude="0.2"/>
+        <ElasticEase   x:Key="Elastic"      EasingMode="EaseOut"  Oscillations="1" Springiness="5"/>
 
-        <!-- ══════════════════════════════════════════ -->
-        <!--       入场动画：从顶部弹性滑入              -->
-        <!-- ══════════════════════════════════════════ -->
+        <!-- ══════ 入场动画 ══════ -->
         <Storyboard x:Key="SlideInAnimation">
             <DoubleAnimation
                 Storyboard.TargetName="IslandContainer"
@@ -37,76 +35,107 @@
                 EasingFunction="{StaticResource EaseOut}"/>
         </Storyboard>
 
-        <!-- ══════════════════════════════════════════ -->
-        <!--          Hover 放大 / 恢复                 -->
-        <!-- ══════════════════════════════════════════ -->
+        <!-- ══════ 展开动画 ══════ -->
+        <Storyboard x:Key="ExpandAnimation">
+            <DoubleAnimation Storyboard.TargetName="IslandBorder"
+                Storyboard.TargetProperty="Height"
+                To="44" Duration="0:0:0.4"
+                EasingFunction="{StaticResource SpringOpen}"/>
+            <DoubleAnimation Storyboard.TargetName="CompactDot"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.15"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleX"
+                To="1" Duration="0:0:0.4" BeginTime="0:0:0.15"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleY"
+                To="1" Duration="0:0:0.4" BeginTime="0:0:0.15"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="TextContent"
+                Storyboard.TargetProperty="Opacity"
+                To="1" Duration="0:0:0.3" BeginTime="0:0:0.2"
+                EasingFunction="{StaticResource EaseOut}"/>
+            <DoubleAnimation Storyboard.TargetName="SpectrumPanel"
+                Storyboard.TargetProperty="Opacity"
+                To="1" Duration="0:0:0.3" BeginTime="0:0:0.3"
+                EasingFunction="{StaticResource EaseOut}"/>
+        </Storyboard>
+
+        <!-- ══════ 收缩动画 ══════ -->
+        <Storyboard x:Key="ContractAnimation">
+            <DoubleAnimation Storyboard.TargetName="SpectrumPanel"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.12"/>
+            <DoubleAnimation Storyboard.TargetName="TextContent"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.12" BeginTime="0:0:0.03"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleX"
+                To="0" Duration="0:0:0.2" BeginTime="0:0:0.05"
+                EasingFunction="{StaticResource EaseInOut}"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleY"
+                To="0" Duration="0:0:0.2" BeginTime="0:0:0.05"
+                EasingFunction="{StaticResource EaseInOut}"/>
+            <DoubleAnimation Storyboard.TargetName="IslandBorder"
+                Storyboard.TargetProperty="Height"
+                To="32" Duration="0:0:0.35" BeginTime="0:0:0.1"
+                EasingFunction="{StaticResource SpringClose}"/>
+            <DoubleAnimation Storyboard.TargetName="CompactDot"
+                Storyboard.TargetProperty="Opacity"
+                To="1" Duration="0:0:0.2" BeginTime="0:0:0.35"
+                EasingFunction="{StaticResource EaseOut}"/>
+        </Storyboard>
+
+        <!-- ══════ Hover / Press / Release ══════ -->
         <Storyboard x:Key="HoverEnterAnimation">
             <DoubleAnimation Storyboard.TargetName="IslandScale"
-                Storyboard.TargetProperty="ScaleX"
-                To="1.06" Duration="0:0:0.25"
+                Storyboard.TargetProperty="ScaleX" To="1.06" Duration="0:0:0.25"
                 EasingFunction="{StaticResource EaseOut}"/>
             <DoubleAnimation Storyboard.TargetName="IslandScale"
-                Storyboard.TargetProperty="ScaleY"
-                To="1.04" Duration="0:0:0.25"
+                Storyboard.TargetProperty="ScaleY" To="1.04" Duration="0:0:0.25"
                 EasingFunction="{StaticResource EaseOut}"/>
         </Storyboard>
-
         <Storyboard x:Key="HoverLeaveAnimation">
             <DoubleAnimation Storyboard.TargetName="IslandScale"
-                Storyboard.TargetProperty="ScaleX"
-                To="1.0" Duration="0:0:0.3"
+                Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.3"
                 EasingFunction="{StaticResource BounceBack}"/>
             <DoubleAnimation Storyboard.TargetName="IslandScale"
-                Storyboard.TargetProperty="ScaleY"
-                To="1.0" Duration="0:0:0.3"
+                Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.3"
                 EasingFunction="{StaticResource BounceBack}"/>
         </Storyboard>
-
-        <!-- ══════════════════════════════════════════ -->
-        <!--       按下缩小 / 松开弹回 (Mac 风格)       -->
-        <!-- ══════════════════════════════════════════ -->
         <Storyboard x:Key="PressAnimation">
             <DoubleAnimation Storyboard.TargetName="IslandScale"
-                Storyboard.TargetProperty="ScaleX"
-                To="0.95" Duration="0:0:0.1"
+                Storyboard.TargetProperty="ScaleX" To="0.95" Duration="0:0:0.1"
                 EasingFunction="{StaticResource EaseOut}"/>
             <DoubleAnimation Storyboard.TargetName="IslandScale"
-                Storyboard.TargetProperty="ScaleY"
-                To="0.95" Duration="0:0:0.1"
+                Storyboard.TargetProperty="ScaleY" To="0.95" Duration="0:0:0.1"
                 EasingFunction="{StaticResource EaseOut}"/>
         </Storyboard>
-
         <Storyboard x:Key="ReleaseAnimation">
             <DoubleAnimation Storyboard.TargetName="IslandScale"
-                Storyboard.TargetProperty="ScaleX"
-                To="1.06" Duration="0:0:0.35"
+                Storyboard.TargetProperty="ScaleX" To="1.06" Duration="0:0:0.35"
                 EasingFunction="{StaticResource BounceBack}"/>
             <DoubleAnimation Storyboard.TargetName="IslandScale"
-                Storyboard.TargetProperty="ScaleY"
-                To="1.04" Duration="0:0:0.35"
+                Storyboard.TargetProperty="ScaleY" To="1.04" Duration="0:0:0.35"
                 EasingFunction="{StaticResource BounceBack}"/>
         </Storyboard>
 
-        <!-- ══════════════════════════════════════════ -->
-        <!--     麦克风岛分裂动画 (从音乐岛右侧弹出)     -->
-        <!-- ══════════════════════════════════════════ -->
+        <!-- ══════ 麦克风岛分裂 ══════ -->
         <Storyboard x:Key="MicSplitInAnimation">
-            <!-- 宽度从 0 → 44 -->
             <DoubleAnimation Storyboard.TargetName="MicIsland"
                 Storyboard.TargetProperty="Width"
                 From="0" To="44" Duration="0:0:0.4"
                 EasingFunction="{StaticResource Elastic}"/>
-            <!-- 左间距从 0 → 8（制造"分裂"间隙） -->
             <ThicknessAnimation Storyboard.TargetName="MicIsland"
                 Storyboard.TargetProperty="Margin"
                 From="0,0,0,0" To="8,0,0,0" Duration="0:0:0.35"
                 EasingFunction="{StaticResource BounceBack}"/>
-            <!-- 淡入 -->
             <DoubleAnimation Storyboard.TargetName="MicIsland"
                 Storyboard.TargetProperty="Opacity"
                 From="0" To="1" Duration="0:0:0.25"
                 EasingFunction="{StaticResource EaseOut}"/>
-            <!-- 麦克风图标缩放弹入 -->
             <DoubleAnimation Storyboard.TargetName="MicIconScale"
                 Storyboard.TargetProperty="ScaleX"
                 From="0" To="1" Duration="0:0:0.35" BeginTime="0:0:0.15"
@@ -116,28 +145,42 @@
                 From="0" To="1" Duration="0:0:0.35" BeginTime="0:0:0.15"
                 EasingFunction="{StaticResource BounceBack}"/>
         </Storyboard>
-
-        <!-- 麦克风岛收回动画 -->
         <Storyboard x:Key="MicSplitOutAnimation">
             <DoubleAnimation Storyboard.TargetName="MicIconScale"
-                Storyboard.TargetProperty="ScaleX"
-                To="0" Duration="0:0:0.15"
+                Storyboard.TargetProperty="ScaleX" To="0" Duration="0:0:0.15"
                 EasingFunction="{StaticResource EaseOut}"/>
             <DoubleAnimation Storyboard.TargetName="MicIconScale"
-                Storyboard.TargetProperty="ScaleY"
-                To="0" Duration="0:0:0.15"
+                Storyboard.TargetProperty="ScaleY" To="0" Duration="0:0:0.15"
                 EasingFunction="{StaticResource EaseOut}"/>
             <DoubleAnimation Storyboard.TargetName="MicIsland"
-                Storyboard.TargetProperty="Width"
-                To="0" Duration="0:0:0.3" BeginTime="0:0:0.1"
+                Storyboard.TargetProperty="Width" To="0" Duration="0:0:0.3" BeginTime="0:0:0.1"
                 EasingFunction="{StaticResource EaseInOut}"/>
             <ThicknessAnimation Storyboard.TargetName="MicIsland"
-                Storyboard.TargetProperty="Margin"
-                To="0,0,0,0" Duration="0:0:0.3" BeginTime="0:0:0.1"
+                Storyboard.TargetProperty="Margin" To="0,0,0,0" Duration="0:0:0.3" BeginTime="0:0:0.1"
                 EasingFunction="{StaticResource EaseInOut}"/>
             <DoubleAnimation Storyboard.TargetName="MicIsland"
+                Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2" BeginTime="0:0:0.15"/>
+        </Storyboard>
+
+        <!-- ══════ 歌词切换淡入淡出 ══════ -->
+        <Storyboard x:Key="LyricFadeOut">
+            <DoubleAnimation Storyboard.TargetName="LyricText"
                 Storyboard.TargetProperty="Opacity"
-                To="0" Duration="0:0:0.2" BeginTime="0:0:0.15"/>
+                To="0" Duration="0:0:0.12"/>
+            <DoubleAnimation Storyboard.TargetName="LyricTranslate"
+                Storyboard.TargetProperty="Y"
+                To="-6" Duration="0:0:0.12"
+                EasingFunction="{StaticResource EaseOut}"/>
+        </Storyboard>
+        <Storyboard x:Key="LyricFadeIn">
+            <DoubleAnimation Storyboard.TargetName="LyricText"
+                Storyboard.TargetProperty="Opacity"
+                From="0" To="1" Duration="0:0:0.2"
+                EasingFunction="{StaticResource EaseOut}"/>
+            <DoubleAnimation Storyboard.TargetName="LyricTranslate"
+                Storyboard.TargetProperty="Y"
+                From="6" To="0" Duration="0:0:0.2"
+                EasingFunction="{StaticResource EaseOut}"/>
         </Storyboard>
 
     </Window.Resources>
@@ -149,23 +192,21 @@
         <Border x:Name="IslandContainer"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
-                Margin="0,4,0,0"
+                Margin="0,6,0,0"
                 Opacity="0"
                 RenderTransformOrigin="0.5,0">
             <Border.RenderTransform>
                 <TranslateTransform Y="-60"/>
             </Border.RenderTransform>
 
-            <!-- 水平排列：音乐岛 + 麦克风岛 -->
             <StackPanel Orientation="Horizontal">
 
-                <!-- ════════ 音乐岛主体 ════════ -->
+                <!-- ═══════ 灵动岛主体 ═══════ -->
                 <Border x:Name="IslandBorder"
-                        Background="#E8000000"
+                        Background="#EE000000"
                         CornerRadius="22"
-                        MinWidth="180"
-                        Height="44"
-                        Padding="6,0"
+                        Width="50" Height="32"
+                        ClipToBounds="True"
                         Cursor="Hand"
                         RenderTransformOrigin="0.5,0.5">
                     <Border.RenderTransform>
@@ -173,79 +214,106 @@
                     </Border.RenderTransform>
                     <Border.Effect>
                         <DropShadowEffect Color="Black" BlurRadius="16"
-                                          ShadowDepth="2" Opacity="0.4"/>
+                                          ShadowDepth="2" Opacity="0.45"/>
                     </Border.Effect>
 
-                    <StackPanel Orientation="Horizontal"
-                                VerticalAlignment="Center"
-                                HorizontalAlignment="Center"
-                                Margin="6,0">
+                    <Grid>
+                        <!-- 紧凑态小圆点 -->
+                        <Ellipse x:Name="CompactDot"
+                                 Width="10" Height="10"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Opacity="1">
+                            <Ellipse.Fill>
+                                <RadialGradientBrush>
+                                    <GradientStop Color="#88FFFFFF" Offset="0"/>
+                                    <GradientStop Color="#33FFFFFF" Offset="1"/>
+                                </RadialGradientBrush>
+                            </Ellipse.Fill>
+                        </Ellipse>
 
-                        <!-- 封面图（圆形裁剪） -->
-                        <Border Width="30" Height="30"
-                                CornerRadius="15"
-                                Margin="0,0,10,0"
-                                ClipToBounds="True">
-                            <Border.Background>
-                                <ImageBrush x:Name="CoverImage"
-                                            ImageSource="pack://application:,,,/Resources/default_cover.png"
-                                            Stretch="UniformToFill"/>
-                            </Border.Background>
-                        </Border>
-
-                        <!-- 歌曲信息 -->
-                        <StackPanel VerticalAlignment="Center" Margin="0,0,4,0">
-                            <TextBlock x:Name="TitleText"
-                                       Text="Dynamic Island"
-                                       Foreground="White"
-                                       FontSize="13"
-                                       FontWeight="SemiBold"
-                                       FontFamily="Segoe UI Variable, Segoe UI"
-                                       MaxWidth="140"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="SubtitleText"
-                                       Text="就绪"
-                                       Foreground="#99FFFFFF"
-                                       FontSize="10"
-                                       FontFamily="Segoe UI Variable, Segoe UI"
-                                       MaxWidth="140"
-                                       TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-
-                        <!-- ═══ 频谱声波条 ═══ -->
-                        <StackPanel x:Name="SpectrumPanel"
-                                    Orientation="Horizontal"
+                        <!-- 展开态内容 -->
+                        <StackPanel Orientation="Horizontal"
                                     VerticalAlignment="Center"
-                                    Margin="8,0,2,0"
-                                    Visibility="Collapsed">
-                            <!-- 8 根频谱柱，在代码中动态创建 -->
-                        </StackPanel>
+                                    HorizontalAlignment="Center"
+                                    Margin="8,0">
 
-                    </StackPanel>
+                            <!-- 封面 -->
+                            <Border Width="30" Height="30"
+                                    CornerRadius="15" Margin="0,0,10,0"
+                                    ClipToBounds="True"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="CoverScale" ScaleX="0" ScaleY="0"/>
+                                </Border.RenderTransform>
+                                <Border.Background>
+                                    <ImageBrush x:Name="CoverImage"
+                                                ImageSource="pack://application:,,,/Resources/default_cover.png"
+                                                Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+
+                            <!-- ★ 文本区域：歌曲信息 / 歌词 共用 -->
+                            <Grid x:Name="TextContent" Opacity="0"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,2,0">
+
+                                <!-- 普通模式：歌名 + 歌手 -->
+                                <StackPanel x:Name="InfoPanel">
+                                    <TextBlock x:Name="TitleText"
+                                               Foreground="White"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               FontFamily="Segoe UI Variable, Segoe UI"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="SubtitleText"
+                                               Foreground="#99FFFFFF"
+                                               FontSize="10"
+                                               FontFamily="Segoe UI Variable, Segoe UI"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+
+                                <!-- 歌词模式：当前歌词行 -->
+                                <TextBlock x:Name="LyricText"
+                                           Visibility="Collapsed"
+                                           Foreground="White"
+                                           FontSize="12.5"
+                                           FontWeight="Medium"
+                                           FontFamily="Segoe UI Variable, Segoe UI, Microsoft YaHei UI"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
+                                           RenderTransformOrigin="0.5,0.5">
+                                    <TextBlock.RenderTransform>
+                                        <TranslateTransform x:Name="LyricTranslate" Y="0"/>
+                                    </TextBlock.RenderTransform>
+                                </TextBlock>
+                            </Grid>
+
+                            <!-- 频谱条 -->
+                            <StackPanel x:Name="SpectrumPanel"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        Margin="4,0,2,0"
+                                        Opacity="0"/>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
-                <!-- ════════ 麦克风岛（分裂出来） ════════ -->
+                <!-- ═══════ 麦克风岛 ═══════ -->
                 <Border x:Name="MicIsland"
-                        Background="#E8000000"
+                        Background="#EE000000"
                         CornerRadius="22"
-                        Height="44"
-                        Width="0"
-                        Opacity="0"
-                        ClipToBounds="True"
-                        RenderTransformOrigin="0.5,0.5">
+                        Height="44" Width="0" Opacity="0"
+                        ClipToBounds="True">
                     <Border.Effect>
                         <DropShadowEffect Color="Black" BlurRadius="12"
                                           ShadowDepth="2" Opacity="0.3"/>
                     </Border.Effect>
-
-                    <!-- 麦克风图标 -->
-                    <Viewbox Width="20" Height="20"
-                             RenderTransformOrigin="0.5,0.5">
+                    <Viewbox Width="20" Height="20" RenderTransformOrigin="0.5,0.5">
                         <Viewbox.RenderTransform>
                             <ScaleTransform x:Name="MicIconScale" ScaleX="0" ScaleY="0"/>
                         </Viewbox.RenderTransform>
                         <Canvas Width="24" Height="24">
-                            <!-- Material Design 麦克风图标 -->
                             <Path Fill="#22DD44"
                                   Data="M12,2 C13.66,2 15,3.34 15,5 L15,11 C15,12.66 13.66,14 12,14
                                         C10.34,14 9,12.66 9,11 L9,5 C9,3.34 10.34,2 12,2 Z
