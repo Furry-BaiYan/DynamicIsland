@@ -43,6 +43,20 @@ public partial class App : Application
         showHideItem.Click += (_, _) => ToggleIslandVisibility();
         menu.Items.Add(showHideItem);
 
+        // ── 深色 / 浅色模式 ──
+        var themeItem = new MenuItem
+        {
+            Header = "浅色模式",
+            IsCheckable = true,
+            IsChecked = false
+        };
+        themeItem.Click += (_, _) =>
+        {
+            _mainWindow?.SetTheme(!themeItem.IsChecked);
+            themeItem.Header = themeItem.IsChecked ? "深色模式" : "浅色模式";
+        };
+        menu.Items.Insert(1, themeItem);
+
         menu.Items.Add(new Separator());
 
         // ── 开机启动 ──

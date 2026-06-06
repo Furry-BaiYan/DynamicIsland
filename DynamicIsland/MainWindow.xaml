@@ -9,7 +9,9 @@
         ShowInTaskbar="False"
         ResizeMode="NoResize"
         Width="560"
-        Height="70">
+        Height="70"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
 
     <Window.Resources>
 
@@ -162,26 +164,6 @@
                 Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2" BeginTime="0:0:0.15"/>
         </Storyboard>
 
-        <!-- ══════ 歌词切换淡入淡出 ══════ -->
-        <Storyboard x:Key="LyricFadeOut">
-            <DoubleAnimation Storyboard.TargetName="LyricText"
-                Storyboard.TargetProperty="Opacity"
-                To="0" Duration="0:0:0.12"/>
-            <DoubleAnimation Storyboard.TargetName="LyricTranslate"
-                Storyboard.TargetProperty="Y"
-                To="-6" Duration="0:0:0.12"
-                EasingFunction="{StaticResource EaseOut}"/>
-        </Storyboard>
-        <Storyboard x:Key="LyricFadeIn">
-            <DoubleAnimation Storyboard.TargetName="LyricText"
-                Storyboard.TargetProperty="Opacity"
-                From="0" To="1" Duration="0:0:0.2"
-                EasingFunction="{StaticResource EaseOut}"/>
-            <DoubleAnimation Storyboard.TargetName="LyricTranslate"
-                Storyboard.TargetProperty="Y"
-                From="6" To="0" Duration="0:0:0.2"
-                EasingFunction="{StaticResource EaseOut}"/>
-        </Storyboard>
 
     </Window.Resources>
 
@@ -203,7 +185,6 @@
 
                 <!-- ═══════ 灵动岛主体 ═══════ -->
                 <Border x:Name="IslandBorder"
-                        Background="#EE000000"
                         CornerRadius="22"
                         Width="50" Height="32"
                         ClipToBounds="True"
@@ -212,12 +193,27 @@
                     <Border.RenderTransform>
                         <ScaleTransform x:Name="IslandScale" ScaleX="1" ScaleY="1"/>
                     </Border.RenderTransform>
-                    <Border.Effect>
-                        <DropShadowEffect Color="Black" BlurRadius="16"
-                                          ShadowDepth="2" Opacity="0.45"/>
-                    </Border.Effect>
 
                     <Grid>
+                        <!-- 半透明底色（主题可换） -->
+                        <Border x:Name="IslandBg" Background="#CC1A1A1A" CornerRadius="22"/>
+
+                        <!-- 顶部高光条 -->
+                        <Border CornerRadius="22" ClipToBounds="True">
+                            <Border Height="1" VerticalAlignment="Top" Margin="20,0,20,0" Opacity="0.1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="Transparent" Offset="0"/>
+                                        <GradientStop Color="White"       Offset="0.5"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                        </Border>
+
+                        <!-- 玻璃边缘微光 -->
+                        <Border CornerRadius="22" BorderBrush="#18FFFFFF" BorderThickness="0.8"/>
+
                         <!-- 紧凑态小圆点 -->
                         <Ellipse x:Name="CompactDot"
                                  Width="10" Height="10"
@@ -233,14 +229,16 @@
                         </Ellipse>
 
                         <!-- 展开态内容 -->
-                        <StackPanel Orientation="Horizontal"
-                                    VerticalAlignment="Center"
-                                    HorizontalAlignment="Center"
-                                    Margin="8,0">
+                        <Grid VerticalAlignment="Center" Margin="14,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
                             <!-- 封面 -->
-                            <Border Width="30" Height="30"
-                                    CornerRadius="15" Margin="0,0,10,0"
+                            <Border Grid.Column="0" Width="30" Height="30"
+                                    CornerRadius="15" Margin="0,0,8,0"
                                     ClipToBounds="True"
                                     RenderTransformOrigin="0.5,0.5">
                                 <Border.RenderTransform>
@@ -253,10 +251,9 @@
                                 </Border.Background>
                             </Border>
 
-                            <!-- ★ 文本区域：歌曲信息 / 歌词 共用 -->
-                            <Grid x:Name="TextContent" Opacity="0"
-                                  VerticalAlignment="Center"
-                                  Margin="0,0,2,0">
+                            <!-- ★ 文本区域：歌曲信息 -->
+                            <Grid Grid.Column="1" x:Name="TextContent" Opacity="0"
+                                  VerticalAlignment="Center" HorizontalAlignment="Left">
 
                                 <!-- 普通模式：歌名 + 歌手 -->
                                 <StackPanel x:Name="InfoPanel">
@@ -264,51 +261,36 @@
                                                Foreground="White"
                                                FontSize="13" FontWeight="SemiBold"
                                                FontFamily="Segoe UI Variable, Segoe UI"
-                                               TextTrimming="CharacterEllipsis"/>
+                                               TextTrimming="CharacterEllipsis"
+                                               TextOptions.TextRenderingMode="ClearType"
+                                               TextOptions.TextFormattingMode="Display"/>
                                     <TextBlock x:Name="SubtitleText"
                                                Foreground="#99FFFFFF"
-                                               FontSize="10"
+                                               FontSize="11"
                                                FontFamily="Segoe UI Variable, Segoe UI"
-                                               TextTrimming="CharacterEllipsis"/>
+                                               TextTrimming="CharacterEllipsis"
+                                               TextOptions.TextRenderingMode="ClearType"
+                                               TextOptions.TextFormattingMode="Display"/>
                                 </StackPanel>
-
-                                <!-- 歌词模式：当前歌词行 -->
-                                <TextBlock x:Name="LyricText"
-                                           Visibility="Collapsed"
-                                           Foreground="White"
-                                           FontSize="12.5"
-                                           FontWeight="Medium"
-                                           FontFamily="Segoe UI Variable, Segoe UI, Microsoft YaHei UI"
-                                           TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"
-                                           VerticalAlignment="Center"
-                                           RenderTransformOrigin="0.5,0.5">
-                                    <TextBlock.RenderTransform>
-                                        <TranslateTransform x:Name="LyricTranslate" Y="0"/>
-                                    </TextBlock.RenderTransform>
-                                </TextBlock>
                             </Grid>
 
                             <!-- 频谱条 -->
-                            <StackPanel x:Name="SpectrumPanel"
+                            <StackPanel Grid.Column="2" x:Name="SpectrumPanel"
                                         Orientation="Horizontal"
                                         VerticalAlignment="Center"
-                                        Margin="4,0,2,0"
+                                        Margin="8,0,0,0"
                                         Opacity="0"/>
-                        </StackPanel>
+                        </Grid>
                     </Grid>
                 </Border>
 
                 <!-- ═══════ 麦克风岛 ═══════ -->
                 <Border x:Name="MicIsland"
-                        Background="#EE000000"
+                        Background="#CC1A1A1A"
                         CornerRadius="22"
                         Height="44" Width="0" Opacity="0"
-                        ClipToBounds="True">
-                    <Border.Effect>
-                        <DropShadowEffect Color="Black" BlurRadius="12"
-                                          ShadowDepth="2" Opacity="0.3"/>
-                    </Border.Effect>
+                        ClipToBounds="True"
+                        BorderBrush="#18FFFFFF" BorderThickness="0.8">
                     <Viewbox Width="20" Height="20" RenderTransformOrigin="0.5,0.5">
                         <Viewbox.RenderTransform>
                             <ScaleTransform x:Name="MicIconScale" ScaleX="0" ScaleY="0"/>

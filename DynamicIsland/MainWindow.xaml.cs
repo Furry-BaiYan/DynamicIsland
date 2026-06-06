@@ -10,6 +10,8 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using System.Threading;
+using System.Threading.Tasks;
 using DynamicIsland.Audio;
 using DynamicIsland.Helpers;
 using Microsoft.Win32;
@@ -22,22 +24,21 @@ public partial class MainWindow : Window
     private readonly MediaService _mediaService = new();
     private readonly SpectrumService _spectrumService = new(8);
     private readonly MicrophoneService _micService = new();
-    private readonly LyricsService _lyricsService = new();
 
     // ── 频谱条 ──
     private readonly Rectangle[] _spectrumBars = new Rectangle[8];
     private readonly DispatcherTimer _spectrumTimer;
 
-    // ── 歌词同步定时器 ──
-    private readonly DispatcherTimer _lyricTimer;
-    private bool _isLyricMode;
-
     // ── 状态 ──
     private bool _isMusicPlaying;
     private bool _isExpanded;
     private bool _isMicVisible;
+    private bool _isDarkMode = true;
     private string _currentTitle = "";
     private string _currentArtist = "";
+    
+    // ★ 用于消除切歌闪烁的防抖 Token
+    private CancellationTokenSource? _debounceCts;
 
     // ═══════════════════════════════════════════════
     //  构造
@@ -50,10 +51,6 @@ public partial class MainWindow : Window
         // 频谱刷新 ~60fps
         _spectrumTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _spectrumTimer.Tick += OnSpectrumTimerTick;
-
-        // 歌词同步 ~100ms 精度
-        _lyricTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-        _lyricTimer.Tick += OnLyricTimerTick;
 
         Loaded += OnLoaded;
         Closing += OnClosing;
@@ -110,12 +107,6 @@ public partial class MainWindow : Window
         _micService.MicDeactivated += () =>
             Dispatcher.Invoke(() => ShowMicIsland(false));
         _micService.Start();
-
-        // ── 歌词 ──
-        _lyricsService.LyricChanged += line =>
-            Dispatcher.Invoke(() => OnLyricLineChanged(line));
-        _lyricsService.LyricCleared += () =>
-            Dispatcher.Invoke(ExitLyricMode);
     }
 
     // ═══════════════════════════════════════════════
@@ -130,10 +121,7 @@ public partial class MainWindow : Window
         ((Storyboard)FindResource("ExpandAnimation")).Begin(this);
 
         // ★ 动态计算初始宽度
-        var text = _isLyricMode ? (LyricText.Text ?? _currentTitle) : _currentTitle;
-        var width = CalcIslandWidth(
-            string.IsNullOrEmpty(text) ? "Dynamic Island" : text,
-            _isLyricMode ? 12.5 : 13, _isLyricMode ? FontWeights.Medium : FontWeights.SemiBold);
+        var width = CalcIslandWidth(_currentTitle, _currentArtist);
         AnimateWidth(width, 500);
 
         if (!_spectrumTimer.IsEnabled)
@@ -149,9 +137,7 @@ public partial class MainWindow : Window
         AnimateWidth(50, 400);  // ★ 收缩回小药丸
 
         _spectrumTimer.Stop();
-        _lyricTimer.Stop();
         foreach (var bar in _spectrumBars) bar.Height = 2;
-        ExitLyricMode();
     }
 
     // ═══════════════════════════════════════════════
@@ -170,8 +156,9 @@ public partial class MainWindow : Window
                 RadiusX = 1.5,
                 RadiusY = 1.5,
                 Fill = new LinearGradientBrush(
-                    Color.FromRgb(0x4A, 0xDE, 0x80),
-                    Color.FromRgb(0x22, 0xD3, 0xEE), 90),
+                    Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF),  // #CCFFFFFF
+                    Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF),  // #66FFFFFF
+                    90),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(1, 0, 1, 0),
                 Opacity = 0.9
@@ -214,15 +201,18 @@ public partial class MainWindow : Window
         return ft.WidthIncludingTrailingWhitespace;
     }
 
-    /// <summary>根据文本内容计算灵动岛目标宽度</summary>
-    private double CalcIslandWidth(string text, double fontSize, FontWeight weight)
+    private double CalcIslandWidth(string title, string artist)
     {
-        double textW = MeasureTextWidth(text, fontSize, weight);
-        textW = Math.Clamp(textW, 40, 260);  // 文本宽度上下限
+        double titleW = MeasureTextWidth(title, 13, FontWeights.SemiBold);
+        double artistW = MeasureTextWidth(artist, 11, FontWeights.Normal);
+        double textW = Math.Max(titleW, artistW) + 12; // 额外增加一些文字安全留白，避免边缘太挤
 
-        double cover = 40;     // 封面 30 + margin 10
-        double spectrum = 46;  // 8条×5 + margin 6
-        double padding = 22;   // 左右内边距
+        // ★ 修改：提高最小宽度的下限，防止歌名/歌手名字太短时，胶囊缩得太小显得很挤
+        textW = Math.Clamp(textW, 100, 600);  
+
+        double cover = 38;     // 封面 Width=30 + MarginRight=8
+        double spectrum = 42;  // 频谱实际占用空间 + MarginLeft=8
+        double padding = 28;   // 外壳左右两端的内边距整体加大，让整体显得更大气
 
         return cover + textW + spectrum + padding;
     }
@@ -241,71 +231,56 @@ public partial class MainWindow : Window
     }
 
     // ═══════════════════════════════════════════════
-    //  ★ 歌词同步
-    // ═══════════════════════════════════════════════
-
-    /// <summary>歌词定时器：每 100ms 用播放位置同步歌词行</summary>
-    private void OnLyricTimerTick(object? sender, EventArgs e)
-    {
-        if (!_isMusicPlaying || !_lyricsService.HasLyrics) return;
-
-        var position = _mediaService.GetCurrentPosition();
-        _lyricsService.UpdatePosition(position);
-    }
-
-    /// <summary>歌词行变化时：切换到歌词模式，显示当前行</summary>
-    private void OnLyricLineChanged(string line)
-    {
-        if (!_isExpanded || string.IsNullOrWhiteSpace(line)) return;
-
-        if (!_isLyricMode)
-            EnterLyricMode();
-
-        // ★ 宽度跟随歌词长度变化
-        var targetWidth = CalcIslandWidth(line, 12.5, FontWeights.Medium);
-        AnimateWidth(targetWidth);
-
-        var fadeOut = (Storyboard)FindResource("LyricFadeOut");
-        fadeOut.Completed -= OnLyricFadeOutDone;
-        fadeOut.Completed += OnLyricFadeOutDone;
-        _pendingLyricLine = line;
-        fadeOut.Begin(this);
-    }
-
-    private string _pendingLyricLine = "";
-
-    private void OnLyricFadeOutDone(object? sender, EventArgs e)
-    {
-        LyricText.Text = _pendingLyricLine;
-        ((Storyboard)FindResource("LyricFadeIn")).Begin(this);
-    }
-
-    private void EnterLyricMode()
-    {
-        _isLyricMode = true;
-        InfoPanel.Visibility = Visibility.Collapsed;
-        LyricText.Visibility = Visibility.Visible;
-        LyricText.Opacity = 0;
-    }
-
-    private void ExitLyricMode()
-    {
-        _isLyricMode = false;
-        InfoPanel.Visibility = Visibility.Visible;
-        LyricText.Visibility = Visibility.Collapsed;
-        LyricText.Text = "";
-    }
-
-    // ═══════════════════════════════════════════════
     //  媒体状态
     // ═══════════════════════════════════════════════
 
     private async void OnMediaChanged(MediaInfo info)
     {
+        _debounceCts?.Cancel();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+
+        try { await Task.Delay(200, token); }
+        catch (TaskCanceledException) { return; }
+
         _isMusicPlaying = true;
         _currentTitle = info.Title;
         _currentArtist = info.Artist;
 
+        if (_isExpanded)
+        {
+            // ← 这段必须在 OnMediaChanged 里，不是 UpdateContent 里
+            var fadeOut = new DoubleAnimation(0, TimeSpan.FromMilliseconds(120))
+            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+
+            CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, fadeOut);
+            CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, fadeOut.Clone());
+            TextContent.BeginAnimation(OpacityProperty, fadeOut.Clone());
+
+            await Task.Delay(130, token);
+
+            UpdateContent(info);
+
+            var fadeIn = new DoubleAnimation(1, TimeSpan.FromMilliseconds(200))
+            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+
+            CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, fadeIn);
+            CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, fadeIn.Clone());
+            TextContent.BeginAnimation(OpacityProperty, fadeIn.Clone());
+
+            var width = CalcIslandWidth(_currentTitle, _currentArtist);
+            AnimateWidth(width, 300);
+        }
+        else
+        {
+            UpdateContent(info);
+            ExpandIsland();
+        }
+    }
+
+    /// <summary>只更新封面和文字，不触发动画</summary>
+    private void UpdateContent(MediaInfo info)
+    {
         TitleText.Text = string.IsNullOrWhiteSpace(info.Title) ? "正在播放" : info.Title;
         SubtitleText.Text = string.IsNullOrWhiteSpace(info.Artist) ? "未知艺术家" : info.Artist;
 
@@ -328,37 +303,32 @@ public partial class MainWindow : Window
                     new Uri("pack://application:,,,/Resources/default_cover.png"));
             }
         }
-
-        ExpandIsland();
-
-        // ★ 异步加载歌词
-        try
+        else
         {
-            ExitLyricMode();  // 先回到信息模式，歌词加载完再切换
-            await _lyricsService.LoadLyricsAsync(info.Title, info.Artist);
-
-            if (_lyricsService.HasLyrics && _isMusicPlaying)
-            {
-                if (!_lyricTimer.IsEnabled)
-                    _lyricTimer.Start();
-
-                Debug.WriteLine($"[Main] 歌词已加载，启动同步");
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Main] 歌词加载异常: {ex.Message}");
+            CoverImage.ImageSource = new BitmapImage(
+                new Uri("pack://application:,,,/Resources/default_cover.png"));
         }
     }
-
-    private void OnMediaStopped()
+    private async void OnMediaStopped()
     {
+        _debounceCts?.Cancel();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+
+        try
+        {
+            // 防抖：等待 200ms，因为切歌时底层经常是先抛出 Stop 再瞬间抛出 Play
+            // 如果 200ms 内又 Play 了，这个 Stop 就会被取消，从而避免“闪一下收缩又闪一下展开”
+            await Task.Delay(200, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
         _isMusicPlaying = false;
         _currentTitle = "";
         _currentArtist = "";
-
-        _lyricTimer.Stop();
-        _lyricsService.Clear();
 
         ContractIsland();
     }
@@ -379,6 +349,27 @@ public partial class MainWindow : Window
             _isMicVisible = false;
             ((Storyboard)FindResource("MicSplitOutAnimation")).Begin(this);
         }
+    }
+
+    // ═══════════════════════════════════════════════
+    //  深色 / 浅色主题
+    // ═══════════════════════════════════════════════
+
+    public void SetTheme(bool isDark)
+    {
+        _isDarkMode = isDark;
+        var bgColor  = (Color)ColorConverter.ConvertFromString(isDark ? "#CC1A1A1A" : "#CCF5F5F5");
+        var bgBrush  = new SolidColorBrush(bgColor);
+        var fgMain   = isDark ? Colors.White : Color.FromRgb(0x22, 0x22, 0x22);
+        var fgSub    = isDark
+            ? Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x99, 0x22, 0x22, 0x22);
+
+        IslandBg.Background  = bgBrush;
+        MicIsland.Background = bgBrush.Clone();
+
+        TitleText.Foreground    = new SolidColorBrush(fgMain);
+        SubtitleText.Foreground = new SolidColorBrush(fgSub);
     }
 
     // ═══════════════════════════════════════════════
@@ -502,12 +493,12 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
         SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         _spectrumTimer.Stop();
-        _lyricTimer.Stop();
         _spectrumService.Dispose();
         _micService.Dispose();
         _mediaService.Dispose();
-        _lyricsService.Dispose();
     }
 }
