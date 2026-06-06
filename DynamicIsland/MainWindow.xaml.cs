@@ -42,7 +42,7 @@ public partial class MainWindow : Window
     private NotificationData? _currentCallData;
     private string _currentTitle = "";
     private string _currentArtist = "";
-    
+
     // ★ 用于消除切歌闪烁的防抖 Token
     private CancellationTokenSource? _debounceCts;
 
@@ -242,16 +242,16 @@ public partial class MainWindow : Window
 
     private double CalcIslandWidth(string title, string artist)
     {
-        double titleW = MeasureTextWidth(title, 16, FontWeights.Bold);
-        double artistW = MeasureTextWidth(artist, 12, FontWeights.Normal);
-        double textW = Math.Max(titleW, artistW) + 20;
+        double titleW = MeasureTextWidth(title, 13, FontWeights.SemiBold);
+        double artistW = MeasureTextWidth(artist, 11, FontWeights.Normal);
+        double textW = Math.Max(titleW, artistW) + 12; // 额外增加一些文字安全留白，避免边缘太挤
 
-        // ★ 进一步提高最小宽度的下限，从 100 提高到 140，防止太小太挤
-        textW = Math.Clamp(textW, 140, 600);  
+        // ★ 修改：提高最小宽度的下限，防止歌名/歌手名字太短时，胶囊缩得太小显得很挤
+        textW = Math.Clamp(textW, 100, 600);
 
-        double cover = 44;     // 封面增大到 36 + MarginRight=8
-        double spectrum = 42;  // 频谱 + MarginLeft=8
-        double padding = 36;   // 整体左右内边距再次加大，追求更饱满的 iOS 感
+        double cover = 38;     // 封面 Width=30 + MarginRight=8
+        double spectrum = 42;  // 频谱实际占用空间 + MarginLeft=8
+        double padding = 28;   // 外壳左右两端的内边距整体加大，让整体显得更大气
 
         return cover + textW + spectrum + padding;
     }
@@ -508,17 +508,17 @@ public partial class MainWindow : Window
             await Task.Delay(500);
         }
 
-        NotifTitle.Text   = data.Title;
+        NotifTitle.Text = data.Title;
         NotifContent.Text = data.Content;
         NotifIconText.Text = data.AppName.Length > 0 ? data.AppName[..1] : "?";
         var iconColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["QQ"]       = "#12B7F5",
-            ["微信"]     = "#07C160",
-            ["WeChat"]   = "#07C160",
-            ["Discord"]  = "#5865F2",
+            ["QQ"] = "#12B7F5",
+            ["微信"] = "#07C160",
+            ["WeChat"] = "#07C160",
+            ["Discord"] = "#5865F2",
             ["Telegram"] = "#2AABEE",
-            ["钉钉"]     = "#3089DC",
+            ["钉钉"] = "#3089DC",
         };
         var iconColor = iconColors.GetValueOrDefault(data.AppName, "#3399FF");
         NotifIconBg.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(iconColor));
@@ -577,9 +577,9 @@ public partial class MainWindow : Window
 
         Debug.WriteLine($"[Main] 来电: {data.Title}");
 
-        CallNameText.Text    = data.Title;
-        CallStatusText.Text  = "来电中...";
-        CallAvatarText.Text  = data.Title.Length > 0 ? data.Title[..1] : "?";
+        CallNameText.Text = data.Title;
+        CallStatusText.Text = "来电中...";
+        CallAvatarText.Text = data.Title.Length > 0 ? data.Title[..1] : "?";
         CallButtonPanel.Visibility = Visibility.Visible;
 
         if (!_isExpanded)
@@ -600,7 +600,7 @@ public partial class MainWindow : Window
         Debug.WriteLine("[Main] 接听电话");
 
         var bounce = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
-            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
+        { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
         AcceptBtnScale.BeginAnimation(ScaleTransform.ScaleXProperty, bounce);
         AcceptBtnScale.BeginAnimation(ScaleTransform.ScaleYProperty, bounce.Clone());
 
@@ -619,7 +619,7 @@ public partial class MainWindow : Window
         Debug.WriteLine("[Main] 挂断电话");
 
         var bounce = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
-            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
+        { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
         DeclineBtnScale.BeginAnimation(ScaleTransform.ScaleXProperty, bounce);
         DeclineBtnScale.BeginAnimation(ScaleTransform.ScaleYProperty, bounce.Clone());
 
@@ -718,13 +718,13 @@ public partial class MainWindow : Window
     {
         string[] processNames = appName.ToLowerInvariant() switch
         {
-            "qq"                    => ["QQ"],
-            "微信" or "wechat"      => ["WeChat", "WeChatApp"],
-            "discord"               => ["Discord"],
-            "telegram"              => ["Telegram"],
-            "电话" or "phone"       => ["PhoneExperienceHost", "PhoneLinkUI"],
-            "钉钉" or "dingtalk"    => ["DingTalk"],
-            _                       => [appName]
+            "qq" => ["QQ"],
+            "微信" or "wechat" => ["WeChat", "WeChatApp"],
+            "discord" => ["Discord"],
+            "telegram" => ["Telegram"],
+            "电话" or "phone" => ["PhoneExperienceHost", "PhoneLinkUI"],
+            "钉钉" or "dingtalk" => ["DingTalk"],
+            _ => [appName]
         };
 
         foreach (var name in processNames)
@@ -776,17 +776,17 @@ public partial class MainWindow : Window
     public void SetTheme(bool isDark)
     {
         _isDarkMode = isDark;
-        var bgColor  = (Color)ColorConverter.ConvertFromString(isDark ? "#CC1A1A1A" : "#CCF5F5F5");
-        var bgBrush  = new SolidColorBrush(bgColor);
-        var fgMain   = isDark ? Colors.White : Color.FromRgb(0x22, 0x22, 0x22);
-        var fgSub    = isDark
+        var bgColor = (Color)ColorConverter.ConvertFromString(isDark ? "#CC1A1A1A" : "#CCF5F5F5");
+        var bgBrush = new SolidColorBrush(bgColor);
+        var fgMain = isDark ? Colors.White : Color.FromRgb(0x22, 0x22, 0x22);
+        var fgSub = isDark
             ? Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)
             : Color.FromArgb(0x99, 0x22, 0x22, 0x22);
 
-        IslandBg.Background  = bgBrush;
+        IslandBg.Background = bgBrush;
         MicIsland.Background = bgBrush.Clone();
 
-        TitleText.Foreground    = new SolidColorBrush(fgMain);
+        TitleText.Foreground = new SolidColorBrush(fgMain);
         SubtitleText.Foreground = new SolidColorBrush(fgSub);
     }
 
@@ -899,14 +899,14 @@ public partial class MainWindow : Window
     {
         var progress = _mediaService.GetProgress();
         var duration = _mediaService.GetDuration();
-        var current  = _mediaService.GetCurrentPosition();
+        var current = _mediaService.GetCurrentPosition();
 
         var containerWidth = ProgressBarContainer.ActualWidth;
         if (containerWidth > 0)
             ProgressFill.Width = containerWidth * progress;
 
         CurrentTimeText.Text = $"{(int)current.TotalMinutes}:{current.Seconds:D2}";
-        TotalTimeText.Text   = $"{(int)duration.TotalMinutes}:{duration.Seconds:D2}";
+        TotalTimeText.Text = $"{(int)duration.TotalMinutes}:{duration.Seconds:D2}";
     }
 
     private void UpdatePlayPauseIcon()

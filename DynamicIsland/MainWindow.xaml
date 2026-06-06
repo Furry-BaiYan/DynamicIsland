@@ -41,7 +41,7 @@
         <Storyboard x:Key="ExpandAnimation">
             <DoubleAnimation Storyboard.TargetName="IslandBorder"
                 Storyboard.TargetProperty="Height"
-                To="52" Duration="0:0:0.4"
+                To="44" Duration="0:0:0.4"
                 EasingFunction="{StaticResource SpringOpen}"/>
             <DoubleAnimation Storyboard.TargetName="CompactDot"
                 Storyboard.TargetProperty="Opacity"
@@ -289,7 +289,7 @@
                 To="0" Duration="0:0:0.15"/>
             <DoubleAnimation Storyboard.TargetName="IslandBorder"
                 Storyboard.TargetProperty="Height"
-                To="52" Duration="0:0:0.35" BeginTime="0:0:0.1"
+                To="44" Duration="0:0:0.35" BeginTime="0:0:0.1"
                 EasingFunction="{StaticResource SpringClose}"/>
         </Storyboard>
 
@@ -364,7 +364,7 @@
                             </Grid.RenderTransform>
 
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="52"/>
+                                <RowDefinition Height="44"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
@@ -376,43 +376,43 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                            <!-- 封面 -->
-                            <Border Grid.Column="0" Width="36" Height="36"
-                                    CornerRadius="18" Margin="0,0,10,0"
-                                    ClipToBounds="True"
-                                    RenderTransformOrigin="0.5,0.5">
-                                <Border.RenderTransform>
-                                    <ScaleTransform x:Name="CoverScale" ScaleX="0" ScaleY="0"/>
-                                </Border.RenderTransform>
-                                <Border.Background>
-                                    <ImageBrush x:Name="CoverImage"
-                                                ImageSource="pack://application:,,,/Resources/default_cover.png"
-                                                Stretch="UniformToFill"/>
-                                </Border.Background>
-                            </Border>
+                                <!-- 封面 -->
+                                <Border Grid.Column="0" Width="30" Height="30"
+                                        CornerRadius="15" Margin="0,0,8,0"
+                                        ClipToBounds="True"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="CoverScale" ScaleX="0" ScaleY="0"/>
+                                    </Border.RenderTransform>
+                                    <Border.Background>
+                                        <ImageBrush x:Name="CoverImage"
+                                                    ImageSource="pack://application:,,,/Resources/default_cover.png"
+                                                    Stretch="UniformToFill"/>
+                                    </Border.Background>
+                                </Border>
 
-                            <!-- ★ 文本区域：歌曲信息 -->
-                            <Grid Grid.Column="1" x:Name="TextContent" Opacity="0"
-                                  VerticalAlignment="Center" HorizontalAlignment="Left">
+                                <!-- 文本区域：歌曲信息 -->
+                                <Grid Grid.Column="1" x:Name="TextContent" Opacity="0"
+                                      VerticalAlignment="Center" HorizontalAlignment="Left">
+                                    <StackPanel x:Name="InfoPanel">
+                                        <TextBlock x:Name="TitleText"
+                                                   Foreground="White"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   FontFamily="Segoe UI Variable, Segoe UI"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextOptions.TextRenderingMode="ClearType"
+                                                   TextOptions.TextFormattingMode="Display"/>
+                                        <TextBlock x:Name="SubtitleText"
+                                                   Foreground="#99FFFFFF"
+                                                   FontSize="11"
+                                                   FontFamily="Segoe UI Variable, Segoe UI"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextOptions.TextRenderingMode="ClearType"
+                                                   TextOptions.TextFormattingMode="Display"/>
+                                    </StackPanel>
+                                </Grid>
 
-                                <!-- 普通模式：歌名 + 歌手 -->
-                                <StackPanel x:Name="InfoPanel">
-                                    <TextBlock x:Name="TitleText"
-                                               Foreground="White"
-                                               FontSize="16" FontWeight="Bold"
-                                               FontFamily="pack://application:,,,/Resources/Fonts/#HarmonyOS Sans SC"
-                                               TextTrimming="CharacterEllipsis"
-                                               TextOptions.TextRenderingMode="ClearType"
-                                               TextOptions.TextFormattingMode="Display"/>
-                                    <TextBlock x:Name="SubtitleText"
-                                               Foreground="#99FFFFFF"
-                                               FontSize="12"
-                                               FontFamily="pack://application:,,,/Resources/Fonts/#HarmonyOS Sans SC"
-                                               TextTrimming="CharacterEllipsis"
-                                               TextOptions.TextRenderingMode="ClearType"
-                                               TextOptions.TextFormattingMode="Display"/>
-                                </StackPanel>
-                            </Grid>
+
 
                                 <!-- 频谱条 -->
                                 <StackPanel Grid.Column="2" x:Name="SpectrumPanel"
