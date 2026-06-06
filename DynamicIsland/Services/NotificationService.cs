@@ -7,11 +7,12 @@ namespace DynamicIsland.Services;
 
 public class NotificationData
 {
-    public string AppName  { get; set; } = "";
-    public string Title    { get; set; } = "";
-    public string Content  { get; set; } = "";
-    public byte[]? AppIcon { get; set; }
-    public bool IsPhoneCall { get; set; }
+    public string AppName    { get; set; } = "";
+    public string Title      { get; set; } = "";
+    public string Content    { get; set; } = "";
+    public byte[]? AppIcon   { get; set; }
+    public bool IsPhoneCall  { get; set; }
+    public IntPtr WindowHandle { get; set; }
 }
 
 public sealed class NotificationService : IDisposable
@@ -55,10 +56,14 @@ public sealed class NotificationService : IDisposable
     private const uint WINEVENT_OUTOFCONTEXT   = 0x0000;
     private const uint WINEVENT_SKIPOWNPROCESS = 0x0002;
 
-    // QQ/WeChat 等都走 ShellExperienceHost 系统通知，不直接匹配进程
     private static readonly Dictionary<string, string> WatchedProcesses =
         new(StringComparer.OrdinalIgnoreCase)
     {
+        ["QQ"]       = "QQ",
+        ["WeChat"]   = "微信",
+        ["WeChatApp"] = "微信",
+        ["Discord"]  = "Discord",
+        ["Telegram"] = "Telegram",
     };
 
     // 系统通知宿主进程 —— 弹出的窗口需要读取内容来判断来自哪个 App
@@ -83,6 +88,7 @@ public sealed class NotificationService : IDisposable
     private WinEventDelegate? _hookProc;   // 防止被 GC 回收
     private readonly HashSet<string> _recentNotifs = [];
     private DateTime _lastNotifTime = DateTime.MinValue;
+    private bool _isCallActive;
 
     public Task InitializeAsync()
     {
@@ -141,23 +147,21 @@ public sealed class NotificationService : IDisposable
             GetWindowTextW(hwnd, sbTitle, 512);
             var windowText = sbTitle.ToString();
 
-            // 路径 A（直接进程）：按尺寸过滤主窗口
+            // 路径 A（直接进程）：按尺寸过滤主窗口，静默跳过（大窗口事件频繁，不打日志）
+            int notifW = 0, notifH = 0;
             if (isDirect)
             {
                 GetWindowRect(hwnd, out var rect);
-                int w = rect.Right  - rect.Left;
-                int h = rect.Bottom - rect.Top;
-                if (w > 1000 || h > 800 || w < 10 || h < 10) return;
+                notifW = rect.Right  - rect.Left;
+                notifH = rect.Bottom - rect.Top;
+                if (notifW > 1000 || notifH > 800 || notifW < 10 || notifH < 10) return;
             }
 
-            // 防重复：500 ms 内同一进程只处理一次
-            var dedupeKey = isDirect ? processName : $"host_{processName}";
+            // 防重复：直接进程按 进程名_宽x高 组合去重，宿主进程按进程名去重
+            var dedupeKey = isDirect ? $"{processName}_{notifW}x{notifH}" : $"host_{processName}";
             if ((DateTime.Now - _lastNotifTime).TotalMilliseconds < 500
                 && _recentNotifs.Contains(dedupeKey))
-            {
-                Debug.WriteLine($"[Notif] {processName} 被跳过: 防重复");
                 return;
-            }
 
             _lastNotifTime = DateTime.Now;
             _recentNotifs.Clear();
@@ -284,16 +288,73 @@ public sealed class NotificationService : IDisposable
                 return;
             }
 
+            bool isDirectCall = CallKeywords.Any(kw =>
+                directAllText.Contains(kw, StringComparison.OrdinalIgnoreCase));
+
+            if (isDirectCall)
+            {
+                if (_isCallActive) return;
+
+                // 过滤按钮文字和 Chrome 容器名，避免把"加入"解析成来电人
+                string[] callButtonTexts = ["拒绝", "加入", "接听", "挂断", "接受", "拒接",
+                    "Decline", "Accept", "Join", "Chrome Legacy Window"];
+
+                var callTexts = directAllTexts
+                    .Where(t => !callButtonTexts.Any(b =>
+                        t.Equals(b, StringComparison.OrdinalIgnoreCase)))
+                    .Where(t => t.Length >= 2 && t.Length < 100)
+                    .ToList();
+
+                var descText = callTexts.FirstOrDefault(t =>
+                    t.Contains("邀请") || t.Contains("通话") ||
+                    t.Contains("来电") || t.Contains("calling"));
+
+                string callerName = "";
+                if (descText != null)
+                {
+                    var m = System.Text.RegularExpressions.Regex.Match(
+                        descText, @"^(.+?)(?:正在|正|在|的)");
+                    if (m.Success)
+                        callerName = m.Groups[1].Value.Trim();
+                }
+
+                if (string.IsNullOrEmpty(callerName))
+                    callerName = callTexts
+                        .Where(t => t != descText)
+                        .OrderBy(t => t.Length)
+                        .FirstOrDefault() ?? appName!;
+
+                var callData = new NotificationData
+                {
+                    AppName      = appName!,
+                    Title        = callerName,
+                    Content      = descText ?? "来电中",
+                    IsPhoneCall  = true,
+                    WindowHandle = hwnd
+                };
+
+                Debug.WriteLine($"[Notif] ✓ 来电: 来电人={callerName}, 描述={descText}");
+
+                _isCallActive = true;
+                Task.Run(async () => { await Task.Delay(10000); _isCallActive = false; });
+
+                PhoneCallReceived?.Invoke(callData);
+                return;
+            }
+
+            // 普通消息路径
             string[] directSystemTexts = ["新通知", "此通知的设置", "将此通知移动到通知中心",
                 "New notification", "Notification settings", "Move to notification center",
                 "通知", "第 ", "共 "];
 
             var directCleanTexts = directAllTexts
-                .Where(t => !directSystemTexts.Any(s => t.Contains(s, StringComparison.OrdinalIgnoreCase)))
+                .Where(t => !directSystemTexts.Any(s =>
+                    t.Contains(s, StringComparison.OrdinalIgnoreCase)))
                 .Where(t => t.Length >= 2 && t.Length < 100)
                 .ToList();
 
-            var fromText = directAllTexts.FirstOrDefault(t => t.Contains("来自") && t.Contains("的新通知"));
+            var fromText = directAllTexts.FirstOrDefault(t =>
+                t.Contains("来自") && t.Contains("的新通知"));
             string directSender = "";
             if (fromText != null)
             {
@@ -308,18 +369,16 @@ public sealed class NotificationService : IDisposable
 
             var directData = new NotificationData
             {
-                AppName     = appName!,
-                Title       = !string.IsNullOrEmpty(directSender) ? directSender : appName!,
-                Content     = directCleanTexts.FirstOrDefault(t => t != directSender && t != appName) ?? "",
-                IsPhoneCall = CallKeywords.Any(kw => directAllText.Contains(kw, StringComparison.OrdinalIgnoreCase))
+                AppName      = appName!,
+                Title        = !string.IsNullOrEmpty(directSender) ? directSender : appName!,
+                Content      = directCleanTexts.FirstOrDefault(t => t != directSender && t != appName) ?? "",
+                IsPhoneCall  = false,
+                WindowHandle = hwnd
             };
 
             Debug.WriteLine($"[Notif] ✓ 发送通知: App={directData.AppName}, Title={directData.Title}, Content={directData.Content}");
 
-            if (directData.IsPhoneCall)
-                PhoneCallReceived?.Invoke(directData);
-            else
-                NotificationReceived?.Invoke(directData);
+            NotificationReceived?.Invoke(directData);
         }
         catch (Exception ex)
         {

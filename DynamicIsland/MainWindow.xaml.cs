@@ -37,6 +37,8 @@ public partial class MainWindow : Window
     private bool _isMicVisible;
     private bool _isDarkMode = true;
     private bool _isShowingNotification;
+    private bool _isShowingCall;
+    private NotificationData? _currentCallData;
     private string _currentTitle = "";
     private string _currentArtist = "";
     
@@ -85,6 +87,20 @@ public partial class MainWindow : Window
             OnIslandClicked();
         };
 
+        // 来电按钮按下动画
+        DeclineBtn.MouseLeftButtonDown += (_, _) =>
+        {
+            var a = new DoubleAnimation(0.85, TimeSpan.FromMilliseconds(100));
+            DeclineBtnScale.BeginAnimation(ScaleTransform.ScaleXProperty, a);
+            DeclineBtnScale.BeginAnimation(ScaleTransform.ScaleYProperty, a.Clone());
+        };
+        AcceptBtn.MouseLeftButtonDown += (_, _) =>
+        {
+            var a = new DoubleAnimation(0.85, TimeSpan.FromMilliseconds(100));
+            AcceptBtnScale.BeginAnimation(ScaleTransform.ScaleXProperty, a);
+            AcceptBtnScale.BeginAnimation(ScaleTransform.ScaleYProperty, a.Clone());
+        };
+
         CreateSpectrumBars();
 
         ((Storyboard)FindResource("SlideInAnimation")).Begin(this);
@@ -114,6 +130,8 @@ public partial class MainWindow : Window
         // ── 社交通知 ──
         _notifService.NotificationReceived += data =>
             Dispatcher.Invoke(() => ShowNotification(data));
+        _notifService.PhoneCallReceived += data =>
+            Dispatcher.Invoke(() => ShowIncomingCall(data));
         await _notifService.InitializeAsync();
     }
 
@@ -367,6 +385,12 @@ public partial class MainWindow : Window
     {
         Debug.WriteLine($"[Main] ShowNotification 开始: isExpanded={_isExpanded}, isShowingNotif={_isShowingNotification}");
 
+        if (_isShowingCall)
+        {
+            Debug.WriteLine("[Main] 通知被跳过: 来电中");
+            return;
+        }
+
         if (_isShowingNotification)
         {
             Debug.WriteLine("[Main] 通知被跳过: 正在显示另一条");
@@ -442,6 +466,187 @@ public partial class MainWindow : Window
     }
 
     // ═══════════════════════════════════════════════
+    //  来电显示
+    // ═══════════════════════════════════════════════
+
+    private async void ShowIncomingCall(NotificationData data)
+    {
+        Debug.WriteLine("[Main] ShowIncomingCall 被调用");
+        if (_isShowingCall) return;
+        _isShowingCall = true;
+        _currentCallData = data;
+
+        Debug.WriteLine($"[Main] 来电: {data.Title}");
+
+        CallNameText.Text    = data.Title;
+        CallStatusText.Text  = "来电中...";
+        CallAvatarText.Text  = data.Title.Length > 0 ? data.Title[..1] : "?";
+        CallButtonPanel.Visibility = Visibility.Visible;
+
+        if (!_isExpanded)
+        {
+            _isExpanded = true;
+            ((Storyboard)FindResource("ExpandAnimation")).Begin(this);
+            await Task.Delay(400);
+        }
+
+        AnimateWidth(380, 500);
+        ((Storyboard)FindResource("CallExpandAnimation")).Begin(this);
+    }
+
+    private void OnAcceptCall(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (!_isShowingCall || _currentCallData == null) return;
+
+        Debug.WriteLine("[Main] 接听电话");
+
+        var bounce = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
+        AcceptBtnScale.BeginAnimation(ScaleTransform.ScaleXProperty, bounce);
+        AcceptBtnScale.BeginAnimation(ScaleTransform.ScaleYProperty, bounce.Clone());
+
+        ClickCallButton(_currentCallData.WindowHandle, "加入", "接听", "Accept");
+
+        CallButtonPanel.Visibility = Visibility.Collapsed;
+        CallStatusText.Text = "通话中...";
+
+        _ = DismissCallAfterDelay(4000);
+    }
+
+    private void OnDeclineCall(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (!_isShowingCall || _currentCallData == null) return;
+
+        Debug.WriteLine("[Main] 挂断电话");
+
+        var bounce = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
+        DeclineBtnScale.BeginAnimation(ScaleTransform.ScaleXProperty, bounce);
+        DeclineBtnScale.BeginAnimation(ScaleTransform.ScaleYProperty, bounce.Clone());
+
+        ClickCallButton(_currentCallData.WindowHandle, "拒绝", "挂断", "Decline");
+
+        CallButtonPanel.Visibility = Visibility.Collapsed;
+        CallStatusText.Text = "已挂断";
+        CallStatusText.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x3B, 0x30));
+
+        _ = DismissCallAfterDelay(4000);
+    }
+
+    private async Task DismissCallAfterDelay(int ms)
+    {
+        await Task.Delay(ms);
+        CallStatusText.Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF));
+        DismissCall();
+    }
+
+    private static void ClickCallButton(IntPtr hwnd, params string[] buttonNames)
+    {
+        if (hwnd == IntPtr.Zero) return;
+
+        try
+        {
+            var element = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+
+            var allElements = element.FindAll(
+                System.Windows.Automation.TreeScope.Descendants,
+                System.Windows.Automation.Condition.TrueCondition);
+
+            foreach (System.Windows.Automation.AutomationElement el in allElements)
+            {
+                try
+                {
+                    var name = el.Current.Name ?? "";
+                    if (!buttonNames.Any(b => name.Equals(b, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+
+                    var rect = el.Current.BoundingRectangle;
+                    if (rect.IsEmpty || rect.Width < 1 || rect.Height < 1) continue;
+
+                    int clickX = (int)(rect.X + rect.Width  / 2);
+                    int clickY = (int)(rect.Y + rect.Height / 2);
+
+                    Debug.WriteLine($"[Main] 模拟点击 '{name}' 位置: ({clickX}, {clickY})");
+
+                    NativeMethods.SetForegroundWindow(hwnd);
+                    System.Threading.Thread.Sleep(100);
+
+                    NativeMethods.SetCursorPos(clickX, clickY);
+                    System.Threading.Thread.Sleep(50);
+                    NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
+                    System.Threading.Thread.Sleep(30);
+                    NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_LEFTUP,   0, 0, 0, IntPtr.Zero);
+
+                    Debug.WriteLine($"[Main] ✓ 已模拟点击: {name}");
+                    return;
+                }
+                catch (System.Windows.Automation.ElementNotAvailableException) { }
+            }
+
+            Debug.WriteLine("[Main] ⚠ 未找到匹配的按钮");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Main] 点击异常: {ex.Message}");
+        }
+    }
+
+    private static void ActivateCallerApp(string appName)
+    {
+        string[] processNames = appName.ToLowerInvariant() switch
+        {
+            "qq"                    => ["QQ"],
+            "微信" or "wechat"      => ["WeChat", "WeChatApp"],
+            "discord"               => ["Discord"],
+            "telegram"              => ["Telegram"],
+            "电话" or "phone"       => ["PhoneExperienceHost", "PhoneLinkUI"],
+            "钉钉" or "dingtalk"    => ["DingTalk"],
+            _                       => [appName]
+        };
+
+        foreach (var name in processNames)
+        {
+            try
+            {
+                foreach (var proc in Process.GetProcessesByName(name))
+                {
+                    if (proc.MainWindowHandle != IntPtr.Zero)
+                    {
+                        if (NativeMethods.IsIconic(proc.MainWindowHandle))
+                            NativeMethods.ShowWindow(proc.MainWindowHandle, NativeMethods.SW_RESTORE);
+                        NativeMethods.SetForegroundWindow(proc.MainWindowHandle);
+                        Debug.WriteLine($"[Main] 已激活 {name} 窗口");
+                        return;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        Debug.WriteLine($"[Main] 未找到 {appName} 的窗口");
+    }
+
+    private void DismissCall()
+    {
+        if (!_isShowingCall) return;
+
+        Debug.WriteLine("[Main] 来电显示结束");
+
+        ((Storyboard)FindResource("CallCollapseAnimation")).Begin(this);
+
+        if (_isMusicPlaying)
+            AnimateWidth(CalcIslandWidth(_currentTitle, _currentArtist), 400);
+        else
+        {
+            AnimateWidth(50, 400);
+            _isExpanded = false;
+        }
+
+        _isShowingCall = false;
+        _currentCallData = null;
+    }
+
+    // ═══════════════════════════════════════════════
     //  深色 / 浅色主题
     // ═══════════════════════════════════════════════
 
@@ -488,6 +693,8 @@ public partial class MainWindow : Window
 
     private void OnIslandClicked()
     {
+        if (_isShowingCall) return;
+        if (_isShowingNotification) return;
         if (!_isMusicPlaying) return;
 
         var appId = _mediaService.SourceAppId;

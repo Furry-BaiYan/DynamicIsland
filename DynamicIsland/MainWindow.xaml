@@ -221,6 +221,55 @@
                 To="1" Duration="0:0:0.2" BeginTime="0:0:0.25"/>
         </Storyboard>
 
+        <!-- ══════ 来电展开动画：音乐滑出 + 来电内容淡入 ══════ -->
+        <Storyboard x:Key="CallExpandAnimation">
+            <DoubleAnimation Storyboard.TargetName="MusicTranslate"
+                Storyboard.TargetProperty="Y"
+                To="-40" Duration="0:0:0.3"
+                EasingFunction="{StaticResource EaseInOut}"/>
+            <DoubleAnimation Storyboard.TargetName="TextContent"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleX"
+                To="0" Duration="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleY"
+                To="0" Duration="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="SpectrumPanel"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.15"/>
+            <DoubleAnimation Storyboard.TargetName="CallContent"
+                Storyboard.TargetProperty="Opacity"
+                From="0" To="1" Duration="0:0:0.3" BeginTime="0:0:0.2"
+                EasingFunction="{StaticResource EaseOut}"/>
+        </Storyboard>
+
+        <!-- ══════ 来电收缩动画：来电淡出 + 音乐滑回 ══════ -->
+        <Storyboard x:Key="CallCollapseAnimation">
+            <DoubleAnimation Storyboard.TargetName="CallContent"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="MusicTranslate"
+                Storyboard.TargetProperty="Y"
+                From="-40" To="0" Duration="0:0:0.35" BeginTime="0:0:0.15"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="TextContent"
+                Storyboard.TargetProperty="Opacity"
+                To="1" Duration="0:0:0.25" BeginTime="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleX"
+                To="1" Duration="0:0:0.3" BeginTime="0:0:0.2"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleY"
+                To="1" Duration="0:0:0.3" BeginTime="0:0:0.2"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="SpectrumPanel"
+                Storyboard.TargetProperty="Opacity"
+                To="1" Duration="0:0:0.2" BeginTime="0:0:0.3"/>
+        </Storyboard>
+
     </Window.Resources>
 
     <!-- ══════════════════════════════════════════════ -->
@@ -387,6 +436,82 @@
                                            TextOptions.TextFormattingMode="Display"/>
                             </StackPanel>
                         </Grid>
+                        <!-- 来电显示层 -->
+                        <Grid x:Name="CallContent"
+                              Opacity="0"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Stretch"
+                              Margin="10,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 来电人头像（首字母圆形） -->
+                            <Border Grid.Column="0" x:Name="CallAvatarBg"
+                                    Width="32" Height="32" CornerRadius="16"
+                                    Background="#4CAF50" Margin="0,0,8,0">
+                                <TextBlock x:Name="CallAvatarText"
+                                           Text="?" Foreground="White"
+                                           FontSize="16" FontWeight="Bold"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- 来电信息 -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <TextBlock x:Name="CallNameText"
+                                           Text="来电"
+                                           Foreground="White"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextOptions.TextRenderingMode="ClearType"
+                                           TextOptions.TextFormattingMode="Display"/>
+                                <TextBlock x:Name="CallStatusText"
+                                           Text="来电中..."
+                                           Foreground="#99FFFFFF"
+                                           FontSize="10"
+                                           TextOptions.TextRenderingMode="ClearType"
+                                           TextOptions.TextFormattingMode="Display"/>
+                            </StackPanel>
+
+                            <!-- 接听 / 挂断按钮组 -->
+                            <StackPanel Grid.Column="2" x:Name="CallButtonPanel"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <!-- 挂断按钮 -->
+                                <Border x:Name="DeclineBtn"
+                                        Width="36" Height="36" CornerRadius="18"
+                                        Background="#FF3B30" Cursor="Hand" Margin="0,0,8,0"
+                                        MouseLeftButtonUp="OnDeclineCall"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="DeclineBtnScale" ScaleX="1" ScaleY="1"/>
+                                    </Border.RenderTransform>
+                                    <TextBlock Text="✕" Foreground="White"
+                                               FontSize="16" FontWeight="Bold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+
+                                <!-- 接听按钮 -->
+                                <Border x:Name="AcceptBtn"
+                                        Width="36" Height="36" CornerRadius="18"
+                                        Background="#34C759" Cursor="Hand"
+                                        MouseLeftButtonUp="OnAcceptCall"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="AcceptBtnScale" ScaleX="1" ScaleY="1"/>
+                                    </Border.RenderTransform>
+                                    <TextBlock Text="✓" Foreground="White"
+                                               FontSize="16" FontWeight="Bold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+
                     </Grid>
                 </Border>
 
