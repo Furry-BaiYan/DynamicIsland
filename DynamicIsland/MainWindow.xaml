@@ -165,6 +165,62 @@
         </Storyboard>
 
 
+        <!-- ══════ 通知滚入：歌曲向上移出 + 通知从下滚入 ══════ -->
+        <Storyboard x:Key="NotifScrollInAnimation">
+            <DoubleAnimation Storyboard.TargetName="MusicTranslate"
+                Storyboard.TargetProperty="Y"
+                To="-40" Duration="0:0:0.35"
+                EasingFunction="{StaticResource EaseInOut}"/>
+            <DoubleAnimation Storyboard.TargetName="TextContent"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleX"
+                To="0" Duration="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleY"
+                To="0" Duration="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="SpectrumPanel"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.15"/>
+            <DoubleAnimation Storyboard.TargetName="NotifTranslate"
+                Storyboard.TargetProperty="Y"
+                From="40" To="0" Duration="0:0:0.35" BeginTime="0:0:0.1"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="NotificationContent"
+                Storyboard.TargetProperty="Opacity"
+                From="0" To="1" Duration="0:0:0.25" BeginTime="0:0:0.15"/>
+        </Storyboard>
+
+        <!-- ══════ 通知滚出：通知向下移出 + 歌曲从上滚回 ══════ -->
+        <Storyboard x:Key="NotifScrollOutAnimation">
+            <DoubleAnimation Storyboard.TargetName="NotifTranslate"
+                Storyboard.TargetProperty="Y"
+                To="40" Duration="0:0:0.3"
+                EasingFunction="{StaticResource EaseInOut}"/>
+            <DoubleAnimation Storyboard.TargetName="NotificationContent"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.2"/>
+            <DoubleAnimation Storyboard.TargetName="MusicTranslate"
+                Storyboard.TargetProperty="Y"
+                From="-40" To="0" Duration="0:0:0.35" BeginTime="0:0:0.1"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="TextContent"
+                Storyboard.TargetProperty="Opacity"
+                To="1" Duration="0:0:0.25" BeginTime="0:0:0.15"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleX"
+                To="1" Duration="0:0:0.3" BeginTime="0:0:0.15"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="CoverScale"
+                Storyboard.TargetProperty="ScaleY"
+                To="1" Duration="0:0:0.3" BeginTime="0:0:0.15"
+                EasingFunction="{StaticResource BounceBack}"/>
+            <DoubleAnimation Storyboard.TargetName="SpectrumPanel"
+                Storyboard.TargetProperty="Opacity"
+                To="1" Duration="0:0:0.2" BeginTime="0:0:0.25"/>
+        </Storyboard>
+
     </Window.Resources>
 
     <!-- ══════════════════════════════════════════════ -->
@@ -229,7 +285,11 @@
                         </Ellipse>
 
                         <!-- 展开态内容 -->
-                        <Grid VerticalAlignment="Center" Margin="14,0">
+                        <Grid VerticalAlignment="Center" Margin="14,0"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TranslateTransform x:Name="MusicTranslate" Y="0"/>
+                            </Grid.RenderTransform>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -280,6 +340,52 @@
                                         VerticalAlignment="Center"
                                         Margin="8,0,0,0"
                                         Opacity="0"/>
+                        </Grid>
+
+                        <!-- 通知显示层 -->
+                        <Grid x:Name="NotificationContent"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Center"
+                              Margin="14,0"
+                              Opacity="0"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TranslateTransform x:Name="NotifTranslate" Y="0"/>
+                            </Grid.RenderTransform>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 应用图标占位：显示 App 首字母 -->
+                            <Border x:Name="NotifIconBg" Grid.Column="0" Width="26" Height="26"
+                                    CornerRadius="13" Margin="0,0,8,0"
+                                    Background="#3399FF">
+                                <TextBlock x:Name="NotifIconText"
+                                           Text="Q"
+                                           Foreground="White"
+                                           FontSize="14" FontWeight="Bold"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- 消息内容 -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="NotifTitle"
+                                           Foreground="White"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           FontFamily="Segoe UI Variable, Segoe UI"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextOptions.TextRenderingMode="ClearType"
+                                           TextOptions.TextFormattingMode="Display"/>
+                                <TextBlock x:Name="NotifContent"
+                                           Foreground="#99FFFFFF"
+                                           FontSize="10.5"
+                                           FontFamily="Segoe UI Variable, Segoe UI"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextOptions.TextRenderingMode="ClearType"
+                                           TextOptions.TextFormattingMode="Display"/>
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </Border>

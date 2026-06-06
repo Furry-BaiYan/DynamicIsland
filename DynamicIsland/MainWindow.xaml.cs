@@ -14,6 +14,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DynamicIsland.Audio;
 using DynamicIsland.Helpers;
+using DynamicIsland.Services;
 using Microsoft.Win32;
 
 namespace DynamicIsland;
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
     private readonly MediaService _mediaService = new();
     private readonly SpectrumService _spectrumService = new(8);
     private readonly MicrophoneService _micService = new();
+    private readonly NotificationService _notifService = new();
 
     // ── 频谱条 ──
     private readonly Rectangle[] _spectrumBars = new Rectangle[8];
@@ -34,6 +36,7 @@ public partial class MainWindow : Window
     private bool _isExpanded;
     private bool _isMicVisible;
     private bool _isDarkMode = true;
+    private bool _isShowingNotification;
     private string _currentTitle = "";
     private string _currentArtist = "";
     
@@ -107,6 +110,11 @@ public partial class MainWindow : Window
         _micService.MicDeactivated += () =>
             Dispatcher.Invoke(() => ShowMicIsland(false));
         _micService.Start();
+
+        // ── 社交通知 ──
+        _notifService.NotificationReceived += data =>
+            Dispatcher.Invoke(() => ShowNotification(data));
+        await _notifService.InitializeAsync();
     }
 
     // ═══════════════════════════════════════════════
@@ -352,6 +360,88 @@ public partial class MainWindow : Window
     }
 
     // ═══════════════════════════════════════════════
+    //  社交通知展示
+    // ═══════════════════════════════════════════════
+
+    private async void ShowNotification(NotificationData data)
+    {
+        Debug.WriteLine($"[Main] ShowNotification 开始: isExpanded={_isExpanded}, isShowingNotif={_isShowingNotification}");
+
+        if (_isShowingNotification)
+        {
+            Debug.WriteLine("[Main] 通知被跳过: 正在显示另一条");
+            return;
+        }
+
+        _isShowingNotification = true;
+
+        if (!_isExpanded)
+        {
+            Debug.WriteLine("[Main] 通知触发展开");
+            _isExpanded = true;
+            ((Storyboard)FindResource("ExpandAnimation")).Begin(this);
+            var w = CalcIslandWidth(data.Title, data.Content);
+            AnimateWidth(w, 400);
+            await Task.Delay(500);
+        }
+
+        NotifTitle.Text   = data.Title;
+        NotifContent.Text = data.Content;
+        NotifIconText.Text = data.AppName.Length > 0 ? data.AppName[..1] : "?";
+        var iconColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["QQ"]       = "#12B7F5",
+            ["微信"]     = "#07C160",
+            ["WeChat"]   = "#07C160",
+            ["Discord"]  = "#5865F2",
+            ["Telegram"] = "#2AABEE",
+            ["钉钉"]     = "#3089DC",
+        };
+        var iconColor = iconColors.GetValueOrDefault(data.AppName, "#3399FF");
+        NotifIconBg.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(iconColor));
+        Debug.WriteLine($"[Main] 通知内容已设置: {data.Title} - {data.Content}");
+
+        var notifWidth = CalcIslandWidth(data.Title, data.Content);
+        AnimateWidth(notifWidth, 300);
+        Debug.WriteLine($"[Main] 宽度已调整: {notifWidth}");
+
+        // 确保初始状态可见（防止上次动画 HoldEnd 将属性锁在不可见值）
+        NotificationContent.Opacity = 1;
+        NotifTranslate.Y = 0;
+        Debug.WriteLine($"[Main] NotificationContent.Opacity 强制设为 1");
+
+        var scrollIn = FindResource("NotifScrollInAnimation") as Storyboard;
+        if (scrollIn != null)
+        {
+            scrollIn.Begin(this);
+            Debug.WriteLine("[Main] NotifScrollInAnimation 已播放");
+        }
+        else
+        {
+            Debug.WriteLine("[Main] ⚠ NotifScrollInAnimation 找不到！");
+        }
+
+        await Task.Delay(3000);
+
+        var scrollOut = FindResource("NotifScrollOutAnimation") as Storyboard;
+        if (scrollOut != null)
+        {
+            scrollOut.Begin(this);
+            Debug.WriteLine("[Main] NotifScrollOutAnimation 已播放");
+        }
+
+        if (_isMusicPlaying)
+        {
+            var musicWidth = CalcIslandWidth(_currentTitle, _currentArtist);
+            AnimateWidth(musicWidth, 300);
+        }
+
+        await Task.Delay(500);
+        _isShowingNotification = false;
+        Debug.WriteLine("[Main] 通知显示结束");
+    }
+
+    // ═══════════════════════════════════════════════
     //  深色 / 浅色主题
     // ═══════════════════════════════════════════════
 
@@ -500,5 +590,6 @@ public partial class MainWindow : Window
         _spectrumService.Dispose();
         _micService.Dispose();
         _mediaService.Dispose();
+        _notifService.Dispose();
     }
 }
