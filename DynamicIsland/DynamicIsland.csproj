@@ -14,6 +14,7 @@
   <ItemGroup>
     <Resource Include="Resources\icon.ico" />
     <Resource Include="Resources\default_cover.png" />
+    <Resource Include="Resources\Fonts\*.ttf" />
   </ItemGroup>
 
   <ItemGroup>

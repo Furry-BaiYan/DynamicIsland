@@ -242,16 +242,16 @@ public partial class MainWindow : Window
 
     private double CalcIslandWidth(string title, string artist)
     {
-        double titleW = MeasureTextWidth(title, 13, FontWeights.SemiBold);
-        double artistW = MeasureTextWidth(artist, 11, FontWeights.Normal);
-        double textW = Math.Max(titleW, artistW) + 12; // 额外增加一些文字安全留白，避免边缘太挤
+        double titleW = MeasureTextWidth(title, 16, FontWeights.Bold);
+        double artistW = MeasureTextWidth(artist, 12, FontWeights.Normal);
+        double textW = Math.Max(titleW, artistW) + 20;
 
-        // ★ 修改：提高最小宽度的下限，防止歌名/歌手名字太短时，胶囊缩得太小显得很挤
-        textW = Math.Clamp(textW, 100, 600);  
+        // ★ 进一步提高最小宽度的下限，从 100 提高到 140，防止太小太挤
+        textW = Math.Clamp(textW, 140, 600);  
 
-        double cover = 38;     // 封面 Width=30 + MarginRight=8
-        double spectrum = 42;  // 频谱实际占用空间 + MarginLeft=8
-        double padding = 28;   // 外壳左右两端的内边距整体加大，让整体显得更大气
+        double cover = 44;     // 封面增大到 36 + MarginRight=8
+        double spectrum = 42;  // 频谱 + MarginLeft=8
+        double padding = 36;   // 整体左右内边距再次加大，追求更饱满的 iOS 感
 
         return cover + textW + spectrum + padding;
     }
