@@ -88,9 +88,8 @@ public sealed class NotificationService : IDisposable
     private WinEventDelegate? _hookProc;   // 防止被 GC 回收
     private readonly HashSet<string> _recentNotifs = [];
     private DateTime _lastNotifTime = DateTime.MinValue;
-    private bool _isCallActive;
     private readonly DateTime _startTime = DateTime.Now;
-    private readonly HashSet<IntPtr> _handledCallWindows = [];
+    private readonly Dictionary<string, DateTime> _handledCalls = new();
     private readonly HashSet<string> _handledNotifWindows = [];
 
     public Task InitializeAsync()
@@ -297,8 +296,6 @@ public sealed class NotificationService : IDisposable
 
             if (isDirectCall)
             {
-                if (_isCallActive) return;
-
                 // 过滤按钮文字和 Chrome 容器名，避免把"加入"解析成来电人
                 string[] callButtonTexts = ["拒绝", "加入", "接听", "挂断", "接受", "拒接",
                     "Decline", "Accept", "Join", "Chrome Legacy Window"];
@@ -339,16 +336,14 @@ public sealed class NotificationService : IDisposable
 
                 Debug.WriteLine($"[Notif] ✓ 来电: 来电人={callerName}, 描述={descText}");
 
-                if (_handledCallWindows.Contains(hwnd)) return;
-                _handledCallWindows.Add(hwnd);
-
-                _isCallActive = true;
-                Task.Run(async () =>
+                var callKey = $"{appName}_{callerName}";
+                if (_handledCalls.TryGetValue(callKey, out var lastTime)
+                    && (DateTime.Now - lastTime).TotalSeconds < 30)
                 {
-                    await Task.Delay(30000);
-                    _isCallActive = false;
-                    _handledCallWindows.Clear();
-                });
+                    Debug.WriteLine($"[Notif] 来电去重: {callKey}");
+                    return;
+                }
+                _handledCalls[callKey] = DateTime.Now;
 
                 PhoneCallReceived?.Invoke(callData);
                 return;
