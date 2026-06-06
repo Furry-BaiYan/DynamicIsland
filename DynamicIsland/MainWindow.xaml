@@ -41,26 +41,26 @@
         <Storyboard x:Key="ExpandAnimation">
             <DoubleAnimation Storyboard.TargetName="IslandBorder"
                 Storyboard.TargetProperty="Height"
-                To="44" Duration="0:0:0.4"
-                EasingFunction="{StaticResource SpringOpen}"/>
+                To="44" Duration="0:0:0.6"
+                EasingFunction="{StaticResource Elastic}"/>
             <DoubleAnimation Storyboard.TargetName="CompactDot"
                 Storyboard.TargetProperty="Opacity"
                 To="0" Duration="0:0:0.15"/>
             <DoubleAnimation Storyboard.TargetName="CoverScale"
                 Storyboard.TargetProperty="ScaleX"
-                To="1" Duration="0:0:0.4" BeginTime="0:0:0.15"
+                To="1" Duration="0:0:0.5" BeginTime="0:0:0.1"
                 EasingFunction="{StaticResource BounceBack}"/>
             <DoubleAnimation Storyboard.TargetName="CoverScale"
                 Storyboard.TargetProperty="ScaleY"
-                To="1" Duration="0:0:0.4" BeginTime="0:0:0.15"
+                To="1" Duration="0:0:0.5" BeginTime="0:0:0.1"
                 EasingFunction="{StaticResource BounceBack}"/>
             <DoubleAnimation Storyboard.TargetName="TextContent"
                 Storyboard.TargetProperty="Opacity"
-                To="1" Duration="0:0:0.3" BeginTime="0:0:0.2"
+                To="1" Duration="0:0:0.4" BeginTime="0:0:0.2"
                 EasingFunction="{StaticResource EaseOut}"/>
             <DoubleAnimation Storyboard.TargetName="SpectrumPanel"
                 Storyboard.TargetProperty="Opacity"
-                To="1" Duration="0:0:0.3" BeginTime="0:0:0.3"
+                To="1" Duration="0:0:0.4" BeginTime="0:0:0.3"
                 EasingFunction="{StaticResource EaseOut}"/>
         </Storyboard>
 
