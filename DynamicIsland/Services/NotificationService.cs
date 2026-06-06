@@ -59,10 +59,6 @@ public sealed class NotificationService : IDisposable
     private static readonly Dictionary<string, string> WatchedProcesses =
         new(StringComparer.OrdinalIgnoreCase)
     {
-        ["QQ"]       = "QQ",
-        ["WeChat"]   = "微信",
-        ["WeChatApp"] = "微信",
-        ["Discord"]  = "Discord",
         ["Telegram"] = "Telegram",
     };
 
@@ -75,7 +71,7 @@ public sealed class NotificationService : IDisposable
 
     // 宿主路径下从文本内容识别 App 的关键词
     private static readonly string[] AppKeywords =
-        ["QQ", "微信", "WeChat", "Discord", "Telegram", "钉钉", "来电", "电话"];
+        ["Telegram"];
 
     private static readonly string[] CallKeywords =
         ["来电", "呼叫", "incoming call", "正在呼叫", "视频通话", "语音通话", "calling"];
@@ -212,7 +208,7 @@ public sealed class NotificationService : IDisposable
 
                         Debug.WriteLine($"[Notif] 清洗后文本: [{string.Join(", ", cleanTexts)}]");
 
-                        string[] appKeywords = ["QQ", "微信", "WeChat", "Discord", "Telegram", "钉钉"];
+                        string[] appKeywords = ["Telegram"];
                         string? foundApp = null;
                         string? matchedKeyword = null;
                         foreach (var kw in appKeywords)

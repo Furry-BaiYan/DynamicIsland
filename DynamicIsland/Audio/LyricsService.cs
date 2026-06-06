@@ -39,36 +39,53 @@ public sealed class LyricsService : IDisposable
 
     public async Task LoadLyricsAsync(string title, string artist)
     {
-        var songKey = $"{title}|{artist}";
-        if (songKey == _currentSongKey) return; // 同一首歌不重复搜索
-        _currentSongKey = songKey;
-
+        _currentSongKey = $"{title}|{artist}";
         _lines.Clear();
         _currentIndex = -1;
 
         try
         {
-            // 1. 搜索歌曲 ID
+            // 优先 QQ 音乐
+            Debug.WriteLine($"[Lyrics] QQ音乐搜索: {title} - {artist}");
+            var songmid = await QQSearchSongMidAsync(title, artist);
+            if (!string.IsNullOrEmpty(songmid))
+            {
+                var lrc = await QQFetchLrcAsync(songmid);
+                if (!string.IsNullOrWhiteSpace(lrc))
+                {
+                    _lines = ParseLrc(lrc);
+                    if (_lines.Count > 0)
+                    {
+                        Debug.WriteLine($"[Lyrics] QQ音乐加载成功: {_lines.Count} 行");
+                        return;
+                    }
+                }
+                Debug.WriteLine($"[Lyrics] QQ音乐无歌词: mid={songmid}");
+            }
+            else
+            {
+                Debug.WriteLine("[Lyrics] QQ音乐未找到歌曲");
+            }
+
+            // 备用：网易云
+            Debug.WriteLine("[Lyrics] 尝试网易云...");
             var songId = await SearchSongIdAsync(title, artist);
-            if (songId <= 0)
+            if (songId > 0)
             {
-                Debug.WriteLine($"[Lyrics] 未找到: {title} - {artist}");
-                LyricCleared?.Invoke();
-                return;
+                var lrc = await FetchLrcAsync(songId);
+                if (!string.IsNullOrWhiteSpace(lrc))
+                {
+                    _lines = ParseLrc(lrc);
+                    if (_lines.Count > 0)
+                    {
+                        Debug.WriteLine($"[Lyrics] 网易云加载成功: {_lines.Count} 行");
+                        return;
+                    }
+                }
             }
 
-            // 2. 获取 LRC 歌词
-            var lrc = await FetchLrcAsync(songId);
-            if (string.IsNullOrWhiteSpace(lrc))
-            {
-                Debug.WriteLine($"[Lyrics] 无歌词: id={songId}");
-                LyricCleared?.Invoke();
-                return;
-            }
-
-            // 3. 解析 LRC
-            _lines = ParseLrc(lrc);
-            Debug.WriteLine($"[Lyrics] 已加载 {_lines.Count} 行歌词");
+            Debug.WriteLine("[Lyrics] 所有源都无歌词");
+            LyricCleared?.Invoke();
         }
         catch (Exception ex)
         {
@@ -119,6 +136,56 @@ public sealed class LyricsService : IDisposable
     // ═══════════════════════════════════════════════
     //  网易云音乐 API
     // ═══════════════════════════════════════════════
+
+    private static async Task<string?> QQSearchSongMidAsync(string title, string artist)
+    {
+        var query = Uri.EscapeDataString($"{title} {artist}");
+        var url = $"https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w={query}&format=json&p=1&n=5";
+
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("Referer", "https://y.qq.com/");
+        request.Headers.Add("User-Agent", "Mozilla/5.0");
+
+        var response = await _http.SendAsync(request);
+        var json = await response.Content.ReadAsStringAsync();
+
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("data", out var data)
+            && data.TryGetProperty("song", out var song)
+            && song.TryGetProperty("list", out var list)
+            && list.GetArrayLength() > 0)
+        {
+            foreach (var item in list.EnumerateArray())
+            {
+                var name = item.GetProperty("songname").GetString() ?? "";
+                if (name.Equals(title, StringComparison.OrdinalIgnoreCase))
+                    return item.GetProperty("songmid").GetString();
+            }
+            return list[0].GetProperty("songmid").GetString();
+        }
+        return null;
+    }
+
+    private static async Task<string?> QQFetchLrcAsync(string songmid)
+    {
+        var url = $"https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid={songmid}&format=json&nobase64=1";
+
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("Referer", "https://y.qq.com/");
+        request.Headers.Add("User-Agent", "Mozilla/5.0");
+
+        var response = await _http.SendAsync(request);
+        var json = await response.Content.ReadAsStringAsync();
+
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("lyric", out var lyric))
+        {
+            var lrcText = lyric.GetString();
+            if (!string.IsNullOrWhiteSpace(lrcText))
+                return lrcText;
+        }
+        return null;
+    }
 
     private static async Task<long> SearchSongIdAsync(string title, string artist)
     {
@@ -200,10 +267,23 @@ public sealed class LyricsService : IDisposable
 
             var text = match.Groups[4].Value.Trim();
 
-            // 跳过空行、纯信息行
+            // 跳过空行、元数据行
             if (string.IsNullOrWhiteSpace(text)) continue;
             if (text.StartsWith("作词") || text.StartsWith("作曲")
-                || text.StartsWith("编曲") || text.StartsWith("制作"))
+                || text.StartsWith("编曲") || text.StartsWith("制作")
+                || text.StartsWith("词：") || text.StartsWith("词:")
+                || text.StartsWith("曲：") || text.StartsWith("曲:")
+                || text.StartsWith("编：") || text.StartsWith("编:")
+                || text.StartsWith("混音") || text.StartsWith("母带")
+                || text.StartsWith("录音") || text.StartsWith("监制")
+                || text.StartsWith("制作人") || text.StartsWith("出品")
+                || text.StartsWith("发行") || text.StartsWith("OP")
+                || text.StartsWith("SP") || text.StartsWith("ST")
+                || text.StartsWith("Lyrics") || text.StartsWith("Compose")
+                || text.StartsWith("Arrange") || text.StartsWith("Produce")
+                || text.StartsWith("Mix") || text.StartsWith("Master")
+                || text.StartsWith("Written") || text.StartsWith("Music")
+                || (text.Contains('：') && text.Length < 20 && !text.Contains('，') && !text.Contains('。')))
                 continue;
 
             var time = new TimeSpan(0, 0, minutes, seconds, ms);

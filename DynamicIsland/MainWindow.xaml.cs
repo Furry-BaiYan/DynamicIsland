@@ -49,7 +49,9 @@ public partial class MainWindow : Window
     // ── 控制面板 ──
     private bool _isPanelOpen;
     private bool _isCurrentlyPlaying = true;
-    private bool _skipDebounce;
+    private bool _skipNextMediaChanged;
+    private string _lastLyricLine = "";
+    private int _lyricTickCount;
     private DispatcherTimer? _progressTimer;
     private DispatcherTimer? _lyricTimer;
 
@@ -275,78 +277,137 @@ public partial class MainWindow : Window
     {
         _debounceCts?.Cancel();
         _debounceCts = new CancellationTokenSource();
-        var token = _debounceCts.Token;
 
-        if (_skipDebounce)
+        if (_skipNextMediaChanged)
         {
-            _skipDebounce = false;
-        }
-        else
-        {
-            try { await Task.Delay(80, token); }
-            catch (TaskCanceledException) { return; }
+            _skipNextMediaChanged = false;
+            return;
         }
 
         _isMusicPlaying = true;
         _isCurrentlyPlaying = true;
+
+        bool isSongChange = !string.IsNullOrEmpty(_currentTitle) && _currentTitle != info.Title;
         _currentTitle = info.Title;
         _currentArtist = info.Artist;
 
-        if (_isExpanded)
+        if (_isExpanded && isSongChange)
         {
-            // ← 这段必须在 OnMediaChanged 里，不是 UpdateContent 里
-            var fadeOut = new DoubleAnimation(0, TimeSpan.FromMilliseconds(120))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-
-            CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, fadeOut);
-            CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, fadeOut.Clone());
-            TextContent.BeginAnimation(OpacityProperty, fadeOut.Clone());
-
-            await Task.Delay(130, token);
-
+            await SlideTransition(info);
+        }
+        else if (_isExpanded)
+        {
             UpdateContent(info);
-
-            var fadeIn = new DoubleAnimation(1, TimeSpan.FromMilliseconds(200))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-
-            CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, fadeIn);
-            CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, fadeIn.Clone());
-            TextContent.BeginAnimation(OpacityProperty, fadeIn.Clone());
-
-            var width = CalcIslandWidth(_currentTitle, _currentArtist);
-            AnimateWidth(width, 300);
         }
         else
         {
             UpdateContent(info);
             ExpandIsland();
+            if (info.CoverData == null || info.CoverData.Length == 0)
+                _ = RetryLoadCoverAsync();
         }
 
-        // 加载歌词
-        try
-        {
-            await _lyricsService.LoadLyricsAsync(info.Title, info.Artist);
-            if (_lyricsService.HasLyrics)
-            {
-                _lyricTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-                _lyricTimer.Tick -= OnLyricTick;
-                _lyricTimer.Tick += OnLyricTick;
-                _lyricTimer.Start();
-            }
-            else
-            {
-                LyricLine.Text = "";
-            }
-        }
-        catch { LyricLine.Text = ""; }
+        await ReloadLyricsAsync();
     }
 
-    /// <summary>只更新封面和文字，不触发动画</summary>
+    private async Task SlideTransition(MediaInfo newInfo)
+    {
+        var fadeOut = new DoubleAnimation(0, TimeSpan.FromMilliseconds(100));
+        TextContent.BeginAnimation(OpacityProperty, fadeOut);
+
+        await Task.Delay(110);
+
+        UpdateContent(newInfo);
+        if (_isPanelOpen) UpdatePlayPauseIcon();
+
+        var fadeIn = new DoubleAnimation(1, TimeSpan.FromMilliseconds(150));
+        TextContent.BeginAnimation(OpacityProperty, fadeIn);
+
+        await ReloadLyricsAsync();
+
+        if (newInfo.CoverData == null || newInfo.CoverData.Length == 0)
+            _ = RetryLoadCoverAsync();
+    }
+
+    private async Task RetryLoadCoverAsync()
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            await Task.Delay(500);
+            try
+            {
+                var info = await _mediaService.GetCurrentMediaInfoAsync();
+                if (info?.CoverData is { Length: > 0 })
+                {
+                    Dispatcher.Invoke(() => UpdateCover(info.CoverData));
+                    Debug.WriteLine($"[Main] 封面重试成功 (第{i + 1}次)");
+                    return;
+                }
+            }
+            catch { }
+        }
+        Debug.WriteLine("[Main] 封面重试全部失败");
+    }
+
+    private void UpdateCover(byte[] coverData)
+    {
+        try
+        {
+            using var ms = new MemoryStream(coverData);
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = ms;
+            bitmap.EndInit();
+            bitmap.Freeze();
+            CoverImage.ImageSource = bitmap;
+        }
+        catch { }
+    }
+
+    private async Task ReloadLyricsAsync()
+    {
+        LyricLine.Text = "";
+        _lastLyricLine = "";
+        _lyricsService.Clear();
+
+        if (string.IsNullOrEmpty(_currentTitle))
+        {
+            Debug.WriteLine("[Lyric] 跳过: 无歌名");
+            return;
+        }
+
+        Debug.WriteLine($"[Lyric] 开始加载: {_currentTitle} - {_currentArtist}");
+
+        try
+        {
+            await _lyricsService.LoadLyricsAsync(_currentTitle, _currentArtist);
+            Debug.WriteLine($"[Lyric] 加载完成: hasLyrics={_lyricsService.HasLyrics}");
+
+            if (_lyricsService.HasLyrics)
+            {
+                if (_lyricTimer == null)
+                {
+                    _lyricTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+                    _lyricTimer.Tick += OnLyricTick;
+                }
+                if (!_lyricTimer.IsEnabled)
+                    _lyricTimer.Start();
+                Debug.WriteLine("[Lyric] 定时器已启动");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Lyric] 异常: {ex.Message}");
+        }
+    }
+
     private void UpdateContent(MediaInfo info)
     {
         TitleText.Text = string.IsNullOrWhiteSpace(info.Title) ? "正在播放" : info.Title;
         SubtitleText.Text = string.IsNullOrWhiteSpace(info.Artist) ? "未知艺术家" : info.Artist;
 
+        // 只在有封面数据时才更新封面，null 时保留上一首封面等第二次通知
         if (info.CoverData is { Length: > 0 })
         {
             try
@@ -365,11 +426,6 @@ public partial class MainWindow : Window
                 CoverImage.ImageSource = new BitmapImage(
                     new Uri("pack://application:,,,/Resources/default_cover.png"));
             }
-        }
-        else
-        {
-            CoverImage.ImageSource = new BitmapImage(
-                new Uri("pack://application:,,,/Resources/default_cover.png"));
         }
     }
     private async void OnMediaStopped()
@@ -397,6 +453,7 @@ public partial class MainWindow : Window
         _lyricTimer?.Stop();
         _lyricsService.Clear();
         LyricLine.Text = "";
+        _lastLyricLine = "";
 
         ContractIsland();
     }
@@ -795,6 +852,13 @@ public partial class MainWindow : Window
         _progressTimer.Tick += OnProgressTick;
         _progressTimer.Start();
 
+        if (_lyricsService.HasLyrics)
+        {
+            var currentLine = _lyricsService.CurrentLine;
+            if (!string.IsNullOrWhiteSpace(currentLine))
+                LyricLine.Text = currentLine;
+        }
+
         ((Storyboard)FindResource("PanelOpenAnimation")).Begin(this);
         this.Height = 185;
     }
@@ -814,28 +878,21 @@ public partial class MainWindow : Window
     private void OnLyricTick(object? sender, EventArgs e)
     {
         if (!_isMusicPlaying || !_lyricsService.HasLyrics) return;
-        var pos = _mediaService.GetCurrentPosition();
+        var pos = _mediaService.GetCurrentPosition() + TimeSpan.FromMilliseconds(500);
         _lyricsService.UpdatePosition(pos);
+
+        _lyricTickCount++;
+        if (_lyricTickCount % 50 == 0)
+            Debug.WriteLine($"[Lyric] tick: pos={pos:mm\\:ss\\.ff}, current={_lyricsService.CurrentLine}");
     }
 
     private void OnLyricChanged(string line)
     {
+        Debug.WriteLine($"[Lyric] 歌词变化: {line}");
         if (string.IsNullOrWhiteSpace(line)) return;
-
-        var fadeOut = new DoubleAnimation(0, TimeSpan.FromMilliseconds(100));
-        fadeOut.Completed += (_, _) =>
-        {
-            LyricLine.Text = line;
-
-            var fadeIn  = new DoubleAnimation(1, TimeSpan.FromMilliseconds(200))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-            var slideIn = new DoubleAnimation(0, TimeSpan.FromMilliseconds(200))
-                { From = 4, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-
-            LyricLine.BeginAnimation(OpacityProperty, fadeIn);
-            LyricLineTranslate.BeginAnimation(TranslateTransform.YProperty, slideIn);
-        };
-        LyricLine.BeginAnimation(OpacityProperty, fadeOut);
+        if (line == _lastLyricLine) return;
+        _lastLyricLine = line;
+        LyricLine.Text = line;
     }
 
     private void UpdateProgress()
@@ -886,6 +943,8 @@ public partial class MainWindow : Window
                 await _mediaService.PlayAsync();
             else
                 await _mediaService.PauseAsync();
+
+            Debug.WriteLine($"[Main] 播放状态切换: isPlaying={_isCurrentlyPlaying}");
         }
         catch (Exception ex)
         {
@@ -896,39 +955,43 @@ public partial class MainWindow : Window
     private async void OnNextTrack(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
-        _skipDebounce = true;
-
-        var shrink = new DoubleAnimation(0.8, TimeSpan.FromMilliseconds(100));
-        var grow   = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
-            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
-        shrink.Completed += (_, _) =>
-        {
-            CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
-            CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, grow.Clone());
-        };
-        CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
-        CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink.Clone());
-
+        var oldTitle = _currentTitle;
         try { await _mediaService.SkipNextAsync(); } catch { }
+        await PollForTrackChange(oldTitle);
     }
 
     private async void OnPreviousTrack(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
-        _skipDebounce = true;
-
-        var shrink = new DoubleAnimation(0.8, TimeSpan.FromMilliseconds(100));
-        var grow   = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
-            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
-        shrink.Completed += (_, _) =>
-        {
-            CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
-            CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, grow.Clone());
-        };
-        CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
-        CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink.Clone());
-
+        var oldTitle = _currentTitle;
         try { await _mediaService.SkipPreviousAsync(); } catch { }
+        await PollForTrackChange(oldTitle);
+    }
+
+    private async Task PollForTrackChange(string oldTitle)
+    {
+        for (int i = 0; i < 20; i++)
+        {
+            await Task.Delay(100);
+            try
+            {
+                var info = await _mediaService.GetCurrentMediaInfoAsync();
+                if (info != null && info.Title != oldTitle)
+                {
+                    _currentTitle = info.Title;
+                    _currentArtist = info.Artist;
+                    _isCurrentlyPlaying = true;
+                    _skipNextMediaChanged = true;
+
+                    await SlideTransition(info);
+
+                    Debug.WriteLine($"[Main] 轮询到新歌: {info.Title} (第{i + 1}次)");
+                    return;
+                }
+            }
+            catch { }
+        }
+        Debug.WriteLine("[Main] 轮询超时，等事件回调");
     }
 
     private void OnProgressBarClick(object sender, MouseButtonEventArgs e)

@@ -84,6 +84,40 @@ public sealed class MediaService : IDisposable
             await _session.TryPlayAsync();
     }
 
+    public async Task<MediaInfo?> GetCurrentMediaInfoAsync()
+    {
+        if (_session == null) return null;
+        try
+        {
+            var props = await _session.TryGetMediaPropertiesAsync();
+
+            byte[]? coverData = null;
+            if (props.Thumbnail != null)
+            {
+                try
+                {
+                    using var stream = await props.Thumbnail.OpenReadAsync();
+                    var size = (uint)stream.Size;
+                    var buffer = new Windows.Storage.Streams.Buffer(size);
+                    await stream.ReadAsync(buffer, size, Windows.Storage.Streams.InputStreamOptions.None);
+                    using var dataReader = Windows.Storage.Streams.DataReader.FromBuffer(buffer);
+                    coverData = new byte[buffer.Length];
+                    dataReader.ReadBytes(coverData);
+                }
+                catch { }
+            }
+
+            return new MediaInfo
+            {
+                Title = props.Title ?? "",
+                Artist = props.Artist ?? "",
+                CoverData = coverData,
+                SourceAppId = _session.SourceAppUserModelId
+            };
+        }
+        catch { return null; }
+    }
+
     public async Task SkipNextAsync()
     {
         if (_session != null) await _session.TrySkipNextAsync();
@@ -194,29 +228,36 @@ public sealed class MediaService : IDisposable
         try
         {
             var props = await _session.TryGetMediaPropertiesAsync();
-            byte[]? coverData = null;
 
-            if (props.Thumbnail != null)
-            {
-                using var stream = await props.Thumbnail.OpenReadAsync();
-                var size = (uint)stream.Size;
-                var buffer = new Windows.Storage.Streams.Buffer(size);
-                await stream.ReadAsync(buffer, size, Windows.Storage.Streams.InputStreamOptions.None);
-
-                using var dataReader = Windows.Storage.Streams.DataReader.FromBuffer(buffer);
-                coverData = new byte[buffer.Length];
-                dataReader.ReadBytes(coverData);
-            }
-
+            // 第一步：立刻通知歌名和歌手（不等封面）
             var info = new MediaInfo
             {
                 Title = props.Title ?? "",
                 Artist = props.Artist ?? "",
-                CoverData = coverData,
+                CoverData = null,
                 SourceAppId = _session.SourceAppUserModelId
             };
-
             MediaChanged?.Invoke(info);
+
+            // 第二步：异步加载封面，加载完再通知一次
+            if (props.Thumbnail != null)
+            {
+                try
+                {
+                    using var stream = await props.Thumbnail.OpenReadAsync();
+                    var size = (uint)stream.Size;
+                    var buffer = new Windows.Storage.Streams.Buffer(size);
+                    await stream.ReadAsync(buffer, size, Windows.Storage.Streams.InputStreamOptions.None);
+
+                    using var dataReader = Windows.Storage.Streams.DataReader.FromBuffer(buffer);
+                    var coverData = new byte[buffer.Length];
+                    dataReader.ReadBytes(coverData);
+
+                    info.CoverData = coverData;
+                    MediaChanged?.Invoke(info);
+                }
+                catch { }
+            }
         }
         catch (Exception ex)
         {
