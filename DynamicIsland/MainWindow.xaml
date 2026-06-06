@@ -270,6 +270,29 @@
                 To="1" Duration="0:0:0.2" BeginTime="0:0:0.3"/>
         </Storyboard>
 
+        <!-- ══════ 控制面板展开 ══════ -->
+        <Storyboard x:Key="PanelOpenAnimation">
+            <DoubleAnimation Storyboard.TargetName="IslandBorder"
+                Storyboard.TargetProperty="Height"
+                To="148" Duration="0:0:0.4"
+                EasingFunction="{StaticResource SpringOpen}"/>
+            <DoubleAnimation Storyboard.TargetName="MusicControlPanel"
+                Storyboard.TargetProperty="Opacity"
+                To="1" Duration="0:0:0.3" BeginTime="0:0:0.15"
+                EasingFunction="{StaticResource EaseOut}"/>
+        </Storyboard>
+
+        <!-- ══════ 控制面板收回 ══════ -->
+        <Storyboard x:Key="PanelCloseAnimation">
+            <DoubleAnimation Storyboard.TargetName="MusicControlPanel"
+                Storyboard.TargetProperty="Opacity"
+                To="0" Duration="0:0:0.15"/>
+            <DoubleAnimation Storyboard.TargetName="IslandBorder"
+                Storyboard.TargetProperty="Height"
+                To="44" Duration="0:0:0.35" BeginTime="0:0:0.1"
+                EasingFunction="{StaticResource SpringClose}"/>
+        </Storyboard>
+
     </Window.Resources>
 
     <!-- ══════════════════════════════════════════════ -->
@@ -334,61 +357,176 @@
                         </Ellipse>
 
                         <!-- 展开态内容 -->
-                        <Grid VerticalAlignment="Center" Margin="14,0"
+                        <Grid VerticalAlignment="Top" Margin="14,0"
                               RenderTransformOrigin="0.5,0.5">
                             <Grid.RenderTransform>
                                 <TranslateTransform x:Name="MusicTranslate" Y="0"/>
                             </Grid.RenderTransform>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
 
-                            <!-- 封面 -->
-                            <Border Grid.Column="0" Width="30" Height="30"
-                                    CornerRadius="15" Margin="0,0,8,0"
-                                    ClipToBounds="True"
-                                    RenderTransformOrigin="0.5,0.5">
-                                <Border.RenderTransform>
-                                    <ScaleTransform x:Name="CoverScale" ScaleX="0" ScaleY="0"/>
-                                </Border.RenderTransform>
-                                <Border.Background>
-                                    <ImageBrush x:Name="CoverImage"
-                                                ImageSource="pack://application:,,,/Resources/default_cover.png"
-                                                Stretch="UniformToFill"/>
-                                </Border.Background>
-                            </Border>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="44"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                            <!-- ★ 文本区域：歌曲信息 -->
-                            <Grid Grid.Column="1" x:Name="TextContent" Opacity="0"
-                                  VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <!-- Row 0：封面 + 歌名 + 频谱 -->
+                            <Grid Grid.Row="0" VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                                <!-- 普通模式：歌名 + 歌手 -->
-                                <StackPanel x:Name="InfoPanel">
-                                    <TextBlock x:Name="TitleText"
-                                               Foreground="White"
-                                               FontSize="13" FontWeight="SemiBold"
-                                               FontFamily="Segoe UI Variable, Segoe UI"
-                                               TextTrimming="CharacterEllipsis"
-                                               TextOptions.TextRenderingMode="ClearType"
-                                               TextOptions.TextFormattingMode="Display"/>
-                                    <TextBlock x:Name="SubtitleText"
-                                               Foreground="#99FFFFFF"
-                                               FontSize="11"
-                                               FontFamily="Segoe UI Variable, Segoe UI"
-                                               TextTrimming="CharacterEllipsis"
-                                               TextOptions.TextRenderingMode="ClearType"
-                                               TextOptions.TextFormattingMode="Display"/>
-                                </StackPanel>
+                                <!-- 封面 -->
+                                <Border Grid.Column="0" Width="30" Height="30"
+                                        CornerRadius="15" Margin="0,0,8,0"
+                                        ClipToBounds="True"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="CoverScale" ScaleX="0" ScaleY="0"/>
+                                    </Border.RenderTransform>
+                                    <Border.Background>
+                                        <ImageBrush x:Name="CoverImage"
+                                                    ImageSource="pack://application:,,,/Resources/default_cover.png"
+                                                    Stretch="UniformToFill"/>
+                                    </Border.Background>
+                                </Border>
+
+                                <!-- 文本区域：歌曲信息 -->
+                                <Grid Grid.Column="1" x:Name="TextContent" Opacity="0"
+                                      VerticalAlignment="Center" HorizontalAlignment="Left">
+                                    <StackPanel x:Name="InfoPanel">
+                                        <TextBlock x:Name="TitleText"
+                                                   Foreground="White"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   FontFamily="Segoe UI Variable, Segoe UI"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextOptions.TextRenderingMode="ClearType"
+                                                   TextOptions.TextFormattingMode="Display"/>
+                                        <TextBlock x:Name="SubtitleText"
+                                                   Foreground="#99FFFFFF"
+                                                   FontSize="11"
+                                                   FontFamily="Segoe UI Variable, Segoe UI"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextOptions.TextRenderingMode="ClearType"
+                                                   TextOptions.TextFormattingMode="Display"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- 频谱条 -->
+                                <StackPanel Grid.Column="2" x:Name="SpectrumPanel"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Margin="8,0,0,0"
+                                            Opacity="0"/>
                             </Grid>
 
-                            <!-- 频谱条 -->
-                            <StackPanel Grid.Column="2" x:Name="SpectrumPanel"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center"
-                                        Margin="8,0,0,0"
-                                        Opacity="0"/>
+                            <!-- Row 1：音乐控制面板 -->
+                            <StackPanel x:Name="MusicControlPanel" Grid.Row="1"
+                                        Opacity="0" Margin="0,2,0,4"
+                                        IsHitTestVisible="False"
+                                        MouseLeftButtonDown="OnControlPanelClick"
+                                        MouseLeftButtonUp="OnControlPanelClick">
+
+                                <!-- 歌词显示 -->
+                                <TextBlock x:Name="LyricLine"
+                                           Text=""
+                                           Foreground="#CCFFFFFF"
+                                           FontSize="12"
+                                           FontFamily="Segoe UI Variable, Segoe UI, Microsoft YaHei UI"
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="4,2,4,6"
+                                           MaxWidth="260"
+                                           TextOptions.TextRenderingMode="ClearType"
+                                           TextOptions.TextFormattingMode="Display"
+                                           RenderTransformOrigin="0.5,0.5">
+                                    <TextBlock.RenderTransform>
+                                        <TranslateTransform x:Name="LyricLineTranslate" Y="0"/>
+                                    </TextBlock.RenderTransform>
+                                </TextBlock>
+
+                                <!-- 进度条 -->
+                                <Grid Margin="4,0,4,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Name="CurrentTimeText" Grid.Column="0"
+                                               Text="0:00" Foreground="#99FFFFFF" FontSize="9.5"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"
+                                               FontFamily="Segoe UI Variable, Segoe UI"
+                                               TextOptions.TextRenderingMode="ClearType"/>
+
+                                    <Grid Grid.Column="1" Height="3" VerticalAlignment="Center"
+                                          x:Name="ProgressBarContainer" Cursor="Hand"
+                                          Background="Transparent"
+                                          MouseLeftButtonDown="OnProgressBarClick">
+                                        <Border Background="#33FFFFFF" CornerRadius="1.5"/>
+                                        <Border x:Name="ProgressFill"
+                                                Background="White" CornerRadius="1.5"
+                                                HorizontalAlignment="Left" Width="0"/>
+                                    </Grid>
+
+                                    <TextBlock x:Name="TotalTimeText" Grid.Column="2"
+                                               Text="0:00" Foreground="#99FFFFFF" FontSize="9.5"
+                                               VerticalAlignment="Center" Margin="6,0,0,0"
+                                               FontFamily="Segoe UI Variable, Segoe UI"
+                                               TextOptions.TextRenderingMode="ClearType"/>
+                                </Grid>
+
+                                <!-- 控制按钮 -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+
+                                    <!-- 上一首 -->
+                                    <Border Width="36" Height="36" CornerRadius="18"
+                                            Cursor="Hand" Background="Transparent"
+                                            MouseLeftButtonUp="OnPreviousTrack">
+                                        <Canvas Width="16" Height="16"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Rectangle Width="2.5" Height="14" Canvas.Top="1"
+                                                       Fill="#CCFFFFFF" RadiusX="1" RadiusY="1"/>
+                                            <Path Data="M 14,1 L 5,8 L 14,15 Z" Fill="#CCFFFFFF"/>
+                                        </Canvas>
+                                    </Border>
+
+                                    <!-- 播放/暂停 -->
+                                    <Border Width="42" Height="42" CornerRadius="21"
+                                            Cursor="Hand" Background="#22FFFFFF" Margin="20,0"
+                                            MouseLeftButtonUp="OnPlayPause">
+                                        <Grid>
+                                            <Canvas x:Name="PauseIcon" Width="18" Height="18"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Rectangle Canvas.Left="3" Width="4" Height="18"
+                                                           Fill="White" RadiusX="1" RadiusY="1"/>
+                                                <Rectangle Canvas.Left="11" Width="4" Height="18"
+                                                           Fill="White" RadiusX="1" RadiusY="1"/>
+                                            </Canvas>
+                                            <Path x:Name="PlayIcon"
+                                                  Data="M 6,2 L 20,11 L 6,20 Z"
+                                                  Fill="#1DB954" Stretch="Uniform"
+                                                  Width="18" Height="18"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Visibility="Collapsed"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- 下一首 -->
+                                    <Border Width="36" Height="36" CornerRadius="18"
+                                            Cursor="Hand" Background="Transparent"
+                                            MouseLeftButtonUp="OnNextTrack">
+                                        <Canvas Width="16" Height="16"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Path Data="M 2,1 L 11,8 L 2,15 Z" Fill="#CCFFFFFF"/>
+                                            <Rectangle Width="2.5" Height="14" Canvas.Left="13" Canvas.Top="1"
+                                                       Fill="#CCFFFFFF" RadiusX="1" RadiusY="1"/>
+                                        </Canvas>
+                                    </Border>
+
+                                </StackPanel>
+                            </StackPanel>
                         </Grid>
 
                         <!-- 通知显示层 -->
@@ -540,5 +678,6 @@
 
             </StackPanel>
         </Border>
+
     </Grid>
 </Window>

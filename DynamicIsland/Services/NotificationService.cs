@@ -89,6 +89,9 @@ public sealed class NotificationService : IDisposable
     private readonly HashSet<string> _recentNotifs = [];
     private DateTime _lastNotifTime = DateTime.MinValue;
     private bool _isCallActive;
+    private readonly DateTime _startTime = DateTime.Now;
+    private readonly HashSet<IntPtr> _handledCallWindows = [];
+    private readonly HashSet<string> _handledNotifWindows = [];
 
     public Task InitializeAsync()
     {
@@ -119,6 +122,7 @@ public sealed class NotificationService : IDisposable
         IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
         int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
     {
+        if ((DateTime.Now - _startTime).TotalSeconds < 3) return;
         if (hwnd == IntPtr.Zero) return;
 
         try
@@ -335,8 +339,16 @@ public sealed class NotificationService : IDisposable
 
                 Debug.WriteLine($"[Notif] ✓ 来电: 来电人={callerName}, 描述={descText}");
 
+                if (_handledCallWindows.Contains(hwnd)) return;
+                _handledCallWindows.Add(hwnd);
+
                 _isCallActive = true;
-                Task.Run(async () => { await Task.Delay(10000); _isCallActive = false; });
+                Task.Run(async () =>
+                {
+                    await Task.Delay(30000);
+                    _isCallActive = false;
+                    _handledCallWindows.Clear();
+                });
 
                 PhoneCallReceived?.Invoke(callData);
                 return;
@@ -377,6 +389,11 @@ public sealed class NotificationService : IDisposable
             };
 
             Debug.WriteLine($"[Notif] ✓ 发送通知: App={directData.AppName}, Title={directData.Title}, Content={directData.Content}");
+
+            var notifWindowKey = $"{hwnd}_{processName}";
+            if (_handledNotifWindows.Contains(notifWindowKey)) return;
+            _handledNotifWindows.Add(notifWindowKey);
+            Task.Run(async () => { await Task.Delay(10000); _handledNotifWindows.Remove(notifWindowKey); });
 
             NotificationReceived?.Invoke(directData);
         }

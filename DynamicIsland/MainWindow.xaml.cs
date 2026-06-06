@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private readonly SpectrumService _spectrumService = new(8);
     private readonly MicrophoneService _micService = new();
     private readonly NotificationService _notifService = new();
+    private readonly LyricsService _lyricsService = new();
 
     // ── 频谱条 ──
     private readonly Rectangle[] _spectrumBars = new Rectangle[8];
@@ -44,6 +45,13 @@ public partial class MainWindow : Window
     
     // ★ 用于消除切歌闪烁的防抖 Token
     private CancellationTokenSource? _debounceCts;
+
+    // ── 控制面板 ──
+    private bool _isPanelOpen;
+    private bool _isCurrentlyPlaying = true;
+    private bool _skipDebounce;
+    private DispatcherTimer? _progressTimer;
+    private DispatcherTimer? _lyricTimer;
 
     // ═══════════════════════════════════════════════
     //  构造
@@ -81,11 +89,9 @@ public partial class MainWindow : Window
             ((Storyboard)FindResource("HoverLeaveAnimation")).Begin(this);
         IslandBorder.MouseLeftButtonDown += (_, _) =>
             ((Storyboard)FindResource("PressAnimation")).Begin(this);
-        IslandBorder.MouseLeftButtonUp += (_, _) =>
-        {
-            ((Storyboard)FindResource("ReleaseAnimation")).Begin(this);
-            OnIslandClicked();
-        };
+        IslandBorder.MouseLeftButtonUp += OnIslandMouseUp;
+
+        Deactivated += (_, _) => { if (_isPanelOpen) CloseControlPanel(); };
 
         // 来电按钮按下动画
         DeclineBtn.MouseLeftButtonDown += (_, _) =>
@@ -133,6 +139,10 @@ public partial class MainWindow : Window
         _notifService.PhoneCallReceived += data =>
             Dispatcher.Invoke(() => ShowIncomingCall(data));
         await _notifService.InitializeAsync();
+
+        // ── 歌词 ──
+        _lyricsService.LyricChanged += line =>
+            Dispatcher.Invoke(() => OnLyricChanged(line));
     }
 
     // ═══════════════════════════════════════════════
@@ -158,6 +168,7 @@ public partial class MainWindow : Window
     {
         if (!_isExpanded) return;
         _isExpanded = false;
+        if (_isPanelOpen) CloseControlPanel();
 
         ((Storyboard)FindResource("ContractAnimation")).Begin(this);
         AnimateWidth(50, 400);  // ★ 收缩回小药丸
@@ -266,10 +277,18 @@ public partial class MainWindow : Window
         _debounceCts = new CancellationTokenSource();
         var token = _debounceCts.Token;
 
-        try { await Task.Delay(200, token); }
-        catch (TaskCanceledException) { return; }
+        if (_skipDebounce)
+        {
+            _skipDebounce = false;
+        }
+        else
+        {
+            try { await Task.Delay(80, token); }
+            catch (TaskCanceledException) { return; }
+        }
 
         _isMusicPlaying = true;
+        _isCurrentlyPlaying = true;
         _currentTitle = info.Title;
         _currentArtist = info.Artist;
 
@@ -302,6 +321,24 @@ public partial class MainWindow : Window
             UpdateContent(info);
             ExpandIsland();
         }
+
+        // 加载歌词
+        try
+        {
+            await _lyricsService.LoadLyricsAsync(info.Title, info.Artist);
+            if (_lyricsService.HasLyrics)
+            {
+                _lyricTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+                _lyricTimer.Tick -= OnLyricTick;
+                _lyricTimer.Tick += OnLyricTick;
+                _lyricTimer.Start();
+            }
+            else
+            {
+                LyricLine.Text = "";
+            }
+        }
+        catch { LyricLine.Text = ""; }
     }
 
     /// <summary>只更新封面和文字，不触发动画</summary>
@@ -353,8 +390,13 @@ public partial class MainWindow : Window
         }
 
         _isMusicPlaying = false;
+        _isCurrentlyPlaying = false;
         _currentTitle = "";
         _currentArtist = "";
+
+        _lyricTimer?.Stop();
+        _lyricsService.Clear();
+        LyricLine.Text = "";
 
         ContractIsland();
     }
@@ -544,51 +586,75 @@ public partial class MainWindow : Window
     {
         if (hwnd == IntPtr.Zero) return;
 
+        Task.Run(() =>
+        {
+            try
+            {
+                NativeMethods.SetForegroundWindow(hwnd);
+                Thread.Sleep(200);
+
+                var element = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+                var found = FindButtonShallow(element, buttonNames, 0, maxDepth: 3);
+
+                if (found != null)
+                {
+                    var rect = found.Current.BoundingRectangle;
+                    if (!rect.IsEmpty && rect.Width > 1 && rect.Height > 1)
+                    {
+                        int clickX = (int)(rect.X + rect.Width / 2);
+                        int clickY = (int)(rect.Y + rect.Height / 2);
+
+                        Debug.WriteLine($"[Main] 模拟点击位置: ({clickX}, {clickY})");
+
+                        NativeMethods.SetCursorPos(clickX, clickY);
+                        Thread.Sleep(50);
+                        NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
+                        Thread.Sleep(30);
+                        NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
+
+                        Debug.WriteLine($"[Main] ✓ 已点击: {found.Current.Name}");
+                        return;
+                    }
+                }
+
+                Debug.WriteLine("[Main] 未找到按钮，已激活窗口让用户手动操作");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] 点击异常: {ex.Message}");
+                try { NativeMethods.SetForegroundWindow(hwnd); } catch { }
+            }
+        });
+    }
+
+    private static System.Windows.Automation.AutomationElement? FindButtonShallow(
+        System.Windows.Automation.AutomationElement parent, string[] names, int depth, int maxDepth)
+    {
+        if (depth >= maxDepth) return null;
+
         try
         {
-            var element = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
-
-            var allElements = element.FindAll(
-                System.Windows.Automation.TreeScope.Descendants,
+            var children = parent.FindAll(
+                System.Windows.Automation.TreeScope.Children,
                 System.Windows.Automation.Condition.TrueCondition);
 
-            foreach (System.Windows.Automation.AutomationElement el in allElements)
+            foreach (System.Windows.Automation.AutomationElement child in children)
             {
                 try
                 {
-                    var name = el.Current.Name ?? "";
-                    if (!buttonNames.Any(b => name.Equals(b, StringComparison.OrdinalIgnoreCase)))
-                        continue;
+                    var name = child.Current.Name ?? "";
+                    if (names.Any(b => name.Equals(b, StringComparison.OrdinalIgnoreCase)))
+                        return child;
 
-                    var rect = el.Current.BoundingRectangle;
-                    if (rect.IsEmpty || rect.Width < 1 || rect.Height < 1) continue;
-
-                    int clickX = (int)(rect.X + rect.Width  / 2);
-                    int clickY = (int)(rect.Y + rect.Height / 2);
-
-                    Debug.WriteLine($"[Main] 模拟点击 '{name}' 位置: ({clickX}, {clickY})");
-
-                    NativeMethods.SetForegroundWindow(hwnd);
-                    System.Threading.Thread.Sleep(100);
-
-                    NativeMethods.SetCursorPos(clickX, clickY);
-                    System.Threading.Thread.Sleep(50);
-                    NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
-                    System.Threading.Thread.Sleep(30);
-                    NativeMethods.mouse_event(NativeMethods.MOUSEEVENTF_LEFTUP,   0, 0, 0, IntPtr.Zero);
-
-                    Debug.WriteLine($"[Main] ✓ 已模拟点击: {name}");
-                    return;
+                    var result = FindButtonShallow(child, names, depth + 1, maxDepth);
+                    if (result != null) return result;
                 }
                 catch (System.Windows.Automation.ElementNotAvailableException) { }
             }
+        }
+        catch { }
 
-            Debug.WriteLine("[Main] ⚠ 未找到匹配的按钮");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Main] 点击异常: {ex.Message}");
-        }
+        return null;
     }
 
     private static void ActivateCallerApp(string appName)
@@ -691,29 +757,186 @@ public partial class MainWindow : Window
     //  点击跳转
     // ═══════════════════════════════════════════════
 
+    private void OnIslandMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        ((Storyboard)FindResource("ReleaseAnimation")).Begin(this);
+
+        if (_isPanelOpen)
+        {
+            var pos = e.GetPosition(IslandBorder);
+            if (pos.Y > 48) return;
+        }
+
+        OnIslandClicked();
+    }
+
     private void OnIslandClicked()
     {
         if (_isShowingCall) return;
         if (_isShowingNotification) return;
         if (!_isMusicPlaying) return;
 
-        var appId = _mediaService.SourceAppId;
-        if (!string.IsNullOrEmpty(appId))
+        if (_isPanelOpen)
+            CloseControlPanel();
+        else
+            OpenControlPanel();
+    }
+
+    private void OpenControlPanel()
+    {
+        _isPanelOpen = true;
+        MusicControlPanel.IsHitTestVisible = true;
+
+        UpdatePlayPauseIcon();
+        UpdateProgress();
+
+        _progressTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _progressTimer.Tick -= OnProgressTick;
+        _progressTimer.Tick += OnProgressTick;
+        _progressTimer.Start();
+
+        ((Storyboard)FindResource("PanelOpenAnimation")).Begin(this);
+        this.Height = 185;
+    }
+
+    private void CloseControlPanel()
+    {
+        _isPanelOpen = false;
+        MusicControlPanel.IsHitTestVisible = false;
+        _progressTimer?.Stop();
+        ((Storyboard)FindResource("PanelCloseAnimation")).Begin(this);
+        _ = Task.Delay(400).ContinueWith(_ =>
+            Dispatcher.Invoke(() => { if (!_isPanelOpen) this.Height = 70; }));
+    }
+
+    private void OnProgressTick(object? sender, EventArgs e) => UpdateProgress();
+
+    private void OnLyricTick(object? sender, EventArgs e)
+    {
+        if (!_isMusicPlaying || !_lyricsService.HasLyrics) return;
+        var pos = _mediaService.GetCurrentPosition();
+        _lyricsService.UpdatePosition(pos);
+    }
+
+    private void OnLyricChanged(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return;
+
+        var fadeOut = new DoubleAnimation(0, TimeSpan.FromMilliseconds(100));
+        fadeOut.Completed += (_, _) =>
         {
-            var keywords = ExtractProcessKeywords(appId);
-            foreach (var kw in keywords)
-                if (TryActivateByProcessName(kw)) return;
+            LyricLine.Text = line;
+
+            var fadeIn  = new DoubleAnimation(1, TimeSpan.FromMilliseconds(200))
+                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+            var slideIn = new DoubleAnimation(0, TimeSpan.FromMilliseconds(200))
+                { From = 4, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+
+            LyricLine.BeginAnimation(OpacityProperty, fadeIn);
+            LyricLineTranslate.BeginAnimation(TranslateTransform.YProperty, slideIn);
+        };
+        LyricLine.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void UpdateProgress()
+    {
+        var progress = _mediaService.GetProgress();
+        var duration = _mediaService.GetDuration();
+        var current  = _mediaService.GetCurrentPosition();
+
+        var containerWidth = ProgressBarContainer.ActualWidth;
+        if (containerWidth > 0)
+            ProgressFill.Width = containerWidth * progress;
+
+        CurrentTimeText.Text = $"{(int)current.TotalMinutes}:{current.Seconds:D2}";
+        TotalTimeText.Text   = $"{(int)duration.TotalMinutes}:{duration.Seconds:D2}";
+    }
+
+    private void UpdatePlayPauseIcon()
+    {
+        if (_isCurrentlyPlaying)
+        {
+            PauseIcon.Visibility = Visibility.Visible;
+            PauseIcon.Opacity = 1;
+            PlayIcon.Visibility = Visibility.Collapsed;
         }
+        else
+        {
+            PlayIcon.Visibility = Visibility.Visible;
+            PlayIcon.Opacity = 1;
+            PauseIcon.Visibility = Visibility.Collapsed;
+        }
+    }
 
-        if (!string.IsNullOrEmpty(_currentTitle))
-            if (TryActivateByWindowTitle(_currentTitle)) return;
+    private void OnControlPanelClick(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+    }
 
-        string[] common = [
-            "cloudmusic", "QQMusic", "KuGou", "kuwo",
-            "Spotify", "foobar2000", "AIMP", "MusicBee", "wmplayer"
-        ];
-        foreach (var name in common)
-            if (TryActivateByProcessName(name)) return;
+    private async void OnPlayPause(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+
+        _isCurrentlyPlaying = !_isCurrentlyPlaying;
+        UpdatePlayPauseIcon();
+
+        try
+        {
+            if (_isCurrentlyPlaying)
+                await _mediaService.PlayAsync();
+            else
+                await _mediaService.PauseAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Main] 播放控制异常: {ex.Message}");
+        }
+    }
+
+    private async void OnNextTrack(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _skipDebounce = true;
+
+        var shrink = new DoubleAnimation(0.8, TimeSpan.FromMilliseconds(100));
+        var grow   = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
+        shrink.Completed += (_, _) =>
+        {
+            CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, grow.Clone());
+        };
+        CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
+        CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink.Clone());
+
+        try { await _mediaService.SkipNextAsync(); } catch { }
+    }
+
+    private async void OnPreviousTrack(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _skipDebounce = true;
+
+        var shrink = new DoubleAnimation(0.8, TimeSpan.FromMilliseconds(100));
+        var grow   = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
+        shrink.Completed += (_, _) =>
+        {
+            CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, grow.Clone());
+        };
+        CoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
+        CoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink.Clone());
+
+        try { await _mediaService.SkipPreviousAsync(); } catch { }
+    }
+
+    private void OnProgressBarClick(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        var pos = e.GetPosition(ProgressBarContainer);
+        var ratio = pos.X / ProgressBarContainer.ActualWidth;
+        Debug.WriteLine($"[Main] 进度条点击: {ratio:P0}（SMTC 不支持 seek）");
     }
 
     private static List<string> ExtractProcessKeywords(string appId)
@@ -794,6 +1017,9 @@ public partial class MainWindow : Window
         _debounceCts?.Dispose();
         SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         _spectrumTimer.Stop();
+        _progressTimer?.Stop();
+        _lyricTimer?.Stop();
+        _lyricsService.Dispose();
         _spectrumService.Dispose();
         _micService.Dispose();
         _mediaService.Dispose();

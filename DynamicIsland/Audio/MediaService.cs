@@ -56,6 +56,68 @@ public sealed class MediaService : IDisposable
         }
     }
 
+    public async Task PlayAsync()
+    {
+        if (_session != null)
+        {
+            await _session.TryPlayAsync();
+            System.Diagnostics.Debug.WriteLine("[Media] → Play");
+        }
+    }
+
+    public async Task PauseAsync()
+    {
+        if (_session != null)
+        {
+            await _session.TryPauseAsync();
+            System.Diagnostics.Debug.WriteLine("[Media] → Pause");
+        }
+    }
+
+    public async Task TogglePlayPauseAsync()
+    {
+        if (_session == null) return;
+        var info = _session.GetPlaybackInfo();
+        if (info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
+            await _session.TryPauseAsync();
+        else
+            await _session.TryPlayAsync();
+    }
+
+    public async Task SkipNextAsync()
+    {
+        if (_session != null) await _session.TrySkipNextAsync();
+    }
+
+    public async Task SkipPreviousAsync()
+    {
+        if (_session != null) await _session.TrySkipPreviousAsync();
+    }
+
+    public double GetProgress()
+    {
+        if (_session == null) return 0;
+        try
+        {
+            var timeline = _session.GetTimelineProperties();
+            var total = timeline.EndTime - timeline.StartTime;
+            if (total.TotalSeconds < 1) return 0;
+            var pos = GetCurrentPosition();
+            return Math.Clamp(pos.TotalSeconds / total.TotalSeconds, 0, 1);
+        }
+        catch { return 0; }
+    }
+
+    public TimeSpan GetDuration()
+    {
+        try
+        {
+            var timeline = _session?.GetTimelineProperties();
+            return timeline != null ? timeline.EndTime - timeline.StartTime : TimeSpan.Zero;
+        }
+        catch { return TimeSpan.Zero; }
+    }
+
     // ── 初始化 ──
 
     public async Task InitializeAsync()
