@@ -31,6 +31,7 @@ public partial class MainWindow : Window
     // ── 频谱条 ──
     private readonly Rectangle[] _spectrumBars = new Rectangle[8];
     private readonly DispatcherTimer _spectrumTimer;
+    private readonly Random _random;
 
     // ── 状态 ──
     private bool _isMusicPlaying;
@@ -64,8 +65,9 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         // 频谱刷新 ~60fps
-        _spectrumTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _spectrumTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         _spectrumTimer.Tick += OnSpectrumTimerTick;
+        _random = new Random();
 
         Loaded += OnLoaded;
         Closing += OnClosing;
@@ -210,12 +212,18 @@ public partial class MainWindow : Window
     private void OnSpectrumTimerTick(object? sender, EventArgs e)
     {
         if (!_isMusicPlaying || !_isExpanded) return;
-        var spectrum = _spectrumService.Spectrum;
-        for (int i = 0; i < _spectrumBars.Length && i < spectrum.Length; i++)
+        
+        // 每个柱子随机定义一个“长度基准”和“呼吸速度”
+        // 这样长短不一，且运动节奏看起来有规律（向前流动的视觉错觉）
+        for (int i = 0; i < _spectrumBars.Length; i++)
         {
-            double target = 3 + spectrum[i] * 28;
+            double phase = (Environment.TickCount / 100.0) + (i * 0.8);
+            double wave = Math.Sin(phase); // 产生循环规律
+            double randomBase = (i % 2 == 0) ? 15 : 8; // 长短不一的底座
+            double target = randomBase + (wave * 8); // 加上循环波动
+            
             double current = _spectrumBars[i].Height;
-            _spectrumBars[i].Height = current + (target - current) * 0.4;
+            _spectrumBars[i].Height = current + (target - current) * 0.2; // 慢一点的平滑过渡
         }
     }
 
